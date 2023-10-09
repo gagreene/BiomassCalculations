@@ -1,15 +1,15 @@
-import os
+__author__ = ['Gregory A. Greene, map.n.trowel@gmail.com']
+
+import os.path
 import pandas as pd
 import numpy as np
 
 
-def getDF(csv):
-    return pd.read_csv(csv, header=0, index_col=False)
-
-
 # EQUATION PARAMETERS FOR BIOMASS MODELING
-biomass_df = getDF(os.path.join(os.path.dirname(__file__),
-                                'Supplementary_Data\\CanadianNationalBiomass_EquationParameters.csv'))
+biomass_df = pd.read_csv(os.path.join(os.path.dirname(__file__),
+                                      r'Supplementary_Data\Biomass_EquationParameters.csv'),
+                         header=0,
+                         index_col=False)
 biomass_df.set_index('Species', inplace=True)
 
 # GENERAL LIST OF CONIFER SPECIES IN BC
@@ -54,31 +54,27 @@ hardwood_decay_dict = {
 ### CALCULATE BIOMASS COMPONENTS OF ENTIRE TREE FOR ALL SPECIES
 def getTreeBiomass(spp, decayclass, components, dbh, height=None):
     """
+    Function returns species-specific biomass values for indiviudal tree components using
+    the Canadian National Biomass equations (Lambert et al. 2005, Ung et al. 2008).
+    If only DBH is entered, the "DBH-only" model will be used.
+    If both DBH and Height are entered, the DBH-HEIGHT model will be used.
     :param spp: tree species code (uses BC two-letter codes)
     :param decayclass: softwood = 1-9, hardwood = 1-6
     :param components: string (individual) or list (multiple) of tree components ('wood', 'bark', 'branches', 'foliage')
-    :param dbh: tree diameter at breast height (cm; value > 0 cm)
+    :param dbh: tree diameter at breast height (cm; value > 0 cm) - REQUIRED INPUT
     :param height: tree height (m; value > 1.3 m)
-    :return: biomass of tree component(s) as either (1) a single value or a (2) list
+    :return: biomass (kg) of tree component(s) as either (1) a single value or (2) a tuple, as follows...
         (1) A single value is returned if the input "components" parameter is a string type.
         (2) A list of values is returned if the input "components" parameter is a list.
             Values are returned in the order they are received
     """
     # Bring in global variables
-    global biomass_df, softwood_list, tree_components_list, tree_components_dict
+    global biomass_df, softwood_list
+    global tree_components_list, tree_components_dict
     global softwood_decay_dict, hardwood_decay_dict
 
     # Create list to store biomass values
     biomass_list = []
-
-    # Check if components object is string or list
-    if isinstance(components, str):
-        # If it is a string list, make it a list
-        component_list = [components]
-    elif not isinstance(components, list):
-        raise Exception('Components list is not a string or list')
-    else:
-        component_list = components
 
     # Assign decay dictionary based on tree type (softwood or hardwood)
     if spp in softwood_list:
@@ -86,13 +82,27 @@ def getTreeBiomass(spp, decayclass, components, dbh, height=None):
     else:
         decay_dict = hardwood_decay_dict
 
+    # Check if components object is string or list
+    if isinstance(components, str):
+        # If it is a string list, make it a list
+        component_list = [components]
+    elif not isinstance(components, list):
+        raise Exception('"Components" input parameter is not a string or list')
+    else:
+        component_list = components
+
+    # Check if any input components are invalid
+    invalid_components = [comp for comp in component_list if comp not in tree_components_list]
+    if invalid_components:
+        raise Exception(f'The following tree components are invalid: {invalid_components}')
+
     # Calculate biomass
     for component in component_list:
         if height is None:
             # Biomass for DBH only equations
             biomass = (decay_dict.get(decayclass)[tree_components_dict.get(component)] *
                        biomass_df.loc[spp, f'BIOMASS_DBH-HT_B{component}1'] *
-                       pow(dbh, biomass_df.loc[spp, f'BIOMASS_DBH-HT_B{component}2']))
+                       pow(dbh, biomass_df.loc[spp, f'BIOMASS_DBH_B{component}2']))
         else:
             # Biomass for DBH + HEIGHT equations
             biomass = (decay_dict.get(decayclass)[tree_components_dict.get(component)] *
@@ -103,9 +113,9 @@ def getTreeBiomass(spp, decayclass, components, dbh, height=None):
         if isinstance(components, str):
             return biomass
         else:
-            biomass_list += biomass
+            biomass_list += [biomass]
 
-    return biomass_list
+    return tuple(biomass_list)
 
 
 # GET BIOMASS VALUES FOR PHOTOLOAD PLANT PHOTO SERIES
@@ -158,3 +168,39 @@ def getPhotoloadBiomass(pl_code, pct_cvr, height=None):
         'XETE': (height / 25.4) * 0.0154 * np.exp(0.0444 * pct_cvr)
     }
     return photoload_dict.get(pl_code, np.nan)
+
+def getDuffLitterBiomass(spp, return_type, duff_depth=None, litter_depth=None):
+    """
+    :param spp:  tree species code (uses BC two-letter codes)
+    :param return_type: type of value returned (string: "bulk_density" or "biomass")
+    :param duff_depth: depth of duff (cm)
+    :param litter_depth: depth of litter (cm)
+    :return: if return_type = "bulk_density", return duff and litter bulk density (kg/m3) as tuple (duff, litter)
+             if return_type = "biomass", return duff and/or litter biomass (kg/m2)
+        If both duff and litter depths are provided, biomass will be returned as a tuple (e.g., (duff, litter))
+        If a single duff or litter depth is provided, a single biomass value will be returned
+    """
+    global biomass_df
+
+    # Get values from biomass dataframe
+    if return_type == 'bulk_density':
+        return tuple(biomass_df.loc[spp, ['DUFF_BD', 'LITTER_BD']].to_list())
+    elif return_type == 'biomass':
+        if duff_depth and litter_depth:
+            # If both duff and litter depths were provided, calculate biomass for both
+            biomass = tuple(np.multiply(
+                biomass_df.loc[spp, ['DUFF_BD', 'LITTER_BD']].to_list(),
+                [duff_depth, litter_depth]
+            ).tolist())
+        elif duff_depth:
+            # If only duff depth was provided, calculate duff biomass
+            biomass = biomass_df.loc[spp, 'DUFF_BD'] * duff_depth
+        elif litter_depth:
+            # If only litter depth was provided, calculate litter biomass
+            biomass = biomass_df.loc[spp, 'LITTER_BD'] * litter_depth
+        else:
+            raise Exception('Neither duff or litter depths were provided.')
+    else:
+        raise Exception('Input "return_type" parameter is invalid.')
+
+    return biomass

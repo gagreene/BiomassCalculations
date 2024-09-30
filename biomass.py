@@ -255,7 +255,7 @@ def getDuffLitterBiomass(spp: Union[str, list],
     # Return values
     if return_type == 'bulk_density':
         return float(d_bd_total), float(l_bd_total)
-    elif return_type == 'biomass':
+    else:  # return_type == 'biomass':
         # Check if components object is string or list
         if duff_depth and litter_depth:
             biomass = tuple(np.multiply(
@@ -263,12 +263,10 @@ def getDuffLitterBiomass(spp: Union[str, list],
                 [duff_depth, litter_depth]).tolist())
         elif duff_depth:
             biomass = d_bd_total * duff_depth
-        elif litter_depth:
+        else:  # litter_depth:
             biomass = l_bd_total * litter_depth
-        else:
-            raise Exception('Neither duff or litter depths were provided.')
 
-    return biomass
+        return biomass
 
 
 if __name__ == '__main__':

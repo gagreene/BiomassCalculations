@@ -3,7 +3,8 @@ __author__ = ['Gregory A. Greene, map.n.trowel@gmail.com']
 import os
 import pandas as pd
 import numpy as np
-
+from typing import Union, Optional
+import unittest
 
 # EQUATION PARAMETERS FOR BIOMASS MODELING
 biomass_df = pd.read_csv(os.path.join(os.path.dirname(__file__),
@@ -52,7 +53,11 @@ hardwood_decay_dict = {
 
 
 ### CALCULATE BIOMASS COMPONENTS OF ENTIRE TREE FOR ALL SPECIES
-def getTreeBiomass(spp, decayclass, components, dbh, height=None):
+def getTreeBiomass(spp: str,
+                   decayclass: int,
+                   components: Union[str, list],
+                   dbh: float,
+                   height: float = None) -> Union[float, tuple]:
     """
     Function returns species-specific biomass values for indiviudal tree components using
     the Canadian National Biomass equations (Lambert et al. 2005, Ung et al. 2008).
@@ -68,6 +73,20 @@ def getTreeBiomass(spp, decayclass, components, dbh, height=None):
         (2) A list of values is returned if the input "components" parameter is a list.
             Values are returned in the order they are received
     """
+    # ### VERIFY INPUTS
+    # Check if components object is string or list
+    if isinstance(components, str):
+        # If it is a string list, make it a list
+        component_list = [components]
+    elif not isinstance(components, list):
+        raise TypeError('"Components" input parameter is not a string or list')
+    else:
+        component_list = components
+    # Check if any input components are invalid
+    invalid_components = [comp for comp in component_list if comp not in tree_components_list]
+    if invalid_components:
+        raise ValueError(f'The following tree components are invalid: {invalid_components}')
+
     # Bring in global variables
     global biomass_df, softwood_list
     global tree_components_list, tree_components_dict
@@ -81,20 +100,6 @@ def getTreeBiomass(spp, decayclass, components, dbh, height=None):
         decay_dict = softwood_decay_dict
     else:
         decay_dict = hardwood_decay_dict
-
-    # Check if components object is string or list
-    if isinstance(components, str):
-        # If it is a string list, make it a list
-        component_list = [components]
-    elif not isinstance(components, list):
-        raise Exception('"Components" input parameter is not a string or list')
-    else:
-        component_list = components
-
-    # Check if any input components are invalid
-    invalid_components = [comp for comp in component_list if comp not in tree_components_list]
-    if invalid_components:
-        raise Exception(f'The following tree components are invalid: {invalid_components}')
 
     # Calculate biomass
     for component in component_list:
@@ -119,8 +124,11 @@ def getTreeBiomass(spp, decayclass, components, dbh, height=None):
 
 
 # GET BIOMASS VALUES FOR PHOTOLOAD PLANT PHOTO SERIES
-def getPhotoloadBiomass(pl_code, pct_cvr, height=None):
+def getPhotoloadBiomass(pl_code: str,
+                        pct_cvr: float,
+                        height: float = None) -> float:
     """
+    Function to estimate plant biomass using equations derived for the Photoload plant species
     :param pl_code: photoload species code
     :param pct_cvr: percent cover of species (0-100)
     :param height: height of species (cm) - if no height entered, default Photoload heights will be used
@@ -169,37 +177,122 @@ def getPhotoloadBiomass(pl_code, pct_cvr, height=None):
     }
     return photoload_dict.get(pl_code, np.nan)
 
-def getDuffLitterBiomass(spp, return_type, duff_depth=None, litter_depth=None):
+
+def getDuffLitterBiomass(spp: Union[str, list],
+                         pct_list: Optional[list] = None,
+                         return_type: str = 'bulk_density',
+                         duff_depth: Optional[Union[int, float]] = None,
+                         litter_depth: Optional[Union[int, float]] = None) -> Union[float, tuple]:
     """
-    :param spp:  tree species code (uses BC two-letter codes)
+    Function to return bulk density values or calculate biomass for duff and litter.
+
+    Bulk density values are derived from Woodall and Monleon (2008). Species codes provided to this function
+    are associated with the various forest types provided in Woodall and Monleon. The general approach should
+    be to obtain a weighted average value of the duff/litter bulk density values based on the proportion
+    of each species in a stand. Then calculate biomass by multiplying the weighted average bulk density
+    value by the total duff/litter depth.
+    Biomass is calculated as: bulk_density * depth
+    :param spp: a single tree species code (uses BC two-letter codes), or a list of codes
+    :param pct_list: if "spp" is a list of species codes, "pc_list" must be a list of
+        percentages of each species in the list of species codes (range: 0-100). The sum of values must = 100.
     :param return_type: type of value returned (string: "bulk_density" or "biomass")
     :param duff_depth: depth of duff (cm)
     :param litter_depth: depth of litter (cm)
-    :return: if return_type = "bulk_density", return duff and litter bulk density (kg/m3) as tuple (duff, litter)
-             if return_type = "biomass", return duff and/or litter biomass (kg/m2)
-        If both duff and litter depths are provided, biomass will be returned as a tuple (e.g., (duff, litter))
-        If a single duff or litter depth is provided, a single biomass value will be returned
+    :return: If return_type = "bulk_density", return duff and litter bulk density (kg/m3) as tuple (duff, litter).
+        If return_type = "biomass", return duff and/or litter biomass (kg/m2).
+            If both duff and litter depths are provided, biomass will be returned as a tuple (e.g., (duff, litter)).
+            If a single duff or litter depth is provided, a single biomass value will be returned.
     """
+    # ### VERIFY INPUTS
+    # spp
+    if isinstance(spp, list):
+        for s in spp:
+            if not isinstance(s, str):
+                raise TypeError('Each species code in the "spp" list must be a string data type')
+        if pct_list is None:
+            raise ValueError('The "pct_list" parameter must contain a list of of percentages for each '
+                             'species provided in the "spp" list')
+    # pct_list
+    if isinstance(pct_list, list):
+        for pct in pct_list:
+            if not isinstance(pct, (float, int)):
+                raise TypeError('Each value in "pct_list" must be int or float data type')
+        if round(sum(pct_list), 0) != 100:
+            raise ValueError('The values in "pct_list" must sum to 100')
+    # return_type
+    if return_type not in ['bulk_density', 'biomass']:
+        raise ValueError('The "return_type" parameter must be either "bulk_density" or "biomass"')
+    elif return_type == 'biomass':
+        if all(depth is None for depth in (duff_depth, litter_depth)):
+            raise ValueError('Either "duff_depth", "litter_depth", or both parameters must be provided '
+                             'when return_type = "biomass"')
+    # duff_depth
+    if duff_depth is not None:
+        if not isinstance(duff_depth, (int, float)):
+            raise TypeError('The "duff_depth" parameter must be either int or float type, and in units of cm')
+        duff_depth /= 100  # Convert from cm to meters
+    # litter_depth
+    if litter_depth is not None:
+        if not isinstance(litter_depth, (int, float)):
+            raise TypeError('The "litter_depth" parameter must be either int or float type, and in units of cm')
+        litter_depth /= 100  # Convert from cm to meters
+
     global biomass_df
 
-    # Get values from biomass dataframe
+    # Get bulk density values from dataframe
+    if isinstance(spp, list):
+        # Precompute biomass and prop lists
+        bd_list = biomass_df.loc[spp, ['DUFF_BD', 'LITTER_BD']].to_numpy()
+        d_bd_total, l_bd_total = 0, 0
+
+        # Iterate over precomputed lists with zip
+        for (d_bd, l_bd), prop in zip(bd_list, pct_list):
+            d_bd_total += d_bd * prop / 100
+            l_bd_total += l_bd * prop / 100
+    else:
+        d_bd_total, l_bd_total = biomass_df.loc[spp, ['DUFF_BD', 'LITTER_BD']].values
+
+    # Return values
     if return_type == 'bulk_density':
-        return tuple(biomass_df.loc[spp, ['DUFF_BD', 'LITTER_BD']].to_list())
+        return float(d_bd_total), float(l_bd_total)
     elif return_type == 'biomass':
         # Check if components object is string or list
         if duff_depth and litter_depth:
             biomass = tuple(np.multiply(
-                biomass_df.loc[spp, ['DUFF_BD', 'LITTER_BD']].to_list(),
-                [duff_depth, litter_depth]
-            ).tolist())
+                [d_bd_total, l_bd_total],
+                [duff_depth, litter_depth]).tolist())
         elif duff_depth:
-            biomass = biomass_df.loc[spp, 'DUFF_BD'] * duff_depth
+            biomass = d_bd_total * duff_depth
         elif litter_depth:
-            biomass = biomass_df.loc[spp, 'LITTER_BD'] * litter_depth
+            biomass = l_bd_total * litter_depth
         else:
             raise Exception('Neither duff or litter depths were provided.')
-    else:
-        raise Exception('Input "return_type" parameter is invalid.')
 
     return biomass
 
+
+if __name__ == '__main__':
+    # Test getDuffLitterBiomass
+    print('Testing the getDuffLitterBiomass() function...')
+    print('Bulk Density:', getDuffLitterBiomass(spp='PY', return_type='bulk_density'))
+    print('Bulk Density:', getDuffLitterBiomass(spp=['PY', 'FDI', 'PLI'],
+                                                 pct_list=[60, 30, 10],
+                                                 return_type='bulk_density'))
+    print('Biomass:', getDuffLitterBiomass(spp='PY', return_type='biomass', litter_depth=0.7))
+    print('Biomass:', getDuffLitterBiomass(spp='PY', return_type='biomass', duff_depth=3.4))
+    print('Biomass:', getDuffLitterBiomass(spp='PY', return_type='biomass', litter_depth=0.7, duff_depth=3.4))
+    print('Biomass:', getDuffLitterBiomass(spp=['PY', 'FDI', 'PLI'],
+                                            pct_list=[60, 30, 10],
+                                            return_type='biomass',
+                                            litter_depth=0.7,
+                                            duff_depth=3.4))
+    try:
+        print('Testing scenario where pct_list does not sum to 100')
+        getDuffLitterBiomass(spp=['PY', 'FDI', 'PLI'],
+                             pct_list=[60, 30, 1],
+                             return_type='biomass',
+                             litter_depth=0.7,
+                             duff_depth=3.4)
+    except ValueError as err:
+        print(f'\tValueError: {err}')
+        pass

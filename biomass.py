@@ -1,6 +1,6 @@
 __author__ = ['Gregory A. Greene, map.n.trowel@gmail.com']
 
-import os.path
+import os
 import pandas as pd
 import numpy as np
 
@@ -186,17 +186,15 @@ def getDuffLitterBiomass(spp, return_type, duff_depth=None, litter_depth=None):
     if return_type == 'bulk_density':
         return tuple(biomass_df.loc[spp, ['DUFF_BD', 'LITTER_BD']].to_list())
     elif return_type == 'biomass':
+        # Check if components object is string or list
         if duff_depth and litter_depth:
-            # If both duff and litter depths were provided, calculate biomass for both
             biomass = tuple(np.multiply(
                 biomass_df.loc[spp, ['DUFF_BD', 'LITTER_BD']].to_list(),
                 [duff_depth, litter_depth]
             ).tolist())
         elif duff_depth:
-            # If only duff depth was provided, calculate duff biomass
             biomass = biomass_df.loc[spp, 'DUFF_BD'] * duff_depth
         elif litter_depth:
-            # If only litter depth was provided, calculate litter biomass
             biomass = biomass_df.loc[spp, 'LITTER_BD'] * litter_depth
         else:
             raise Exception('Neither duff or litter depths were provided.')
@@ -204,3 +202,4 @@ def getDuffLitterBiomass(spp, return_type, duff_depth=None, litter_depth=None):
         raise Exception('Input "return_type" parameter is invalid.')
 
     return biomass
+

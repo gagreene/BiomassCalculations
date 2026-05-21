@@ -2,6 +2,7 @@ __author__ = ['Gregory A. Greene, map.n.trowel@gmail.com']
 
 import csv
 import math
+import numpy as np
 import warnings
 from collections.abc import Sequence
 from numbers import Real
@@ -49,6 +50,16 @@ def _as_scalar_or_vector(results: list, is_vectorized: bool):
     return results if is_vectorized else results[0]
 
 
+def _any_array(*args) -> bool:
+    """Return True if any argument is a np.ndarray."""
+    return any(isinstance(a, np.ndarray) for a in args)
+
+
+def _to_1d_array(value) -> np.ndarray:
+    """Coerce a scalar or array to a 1-D ndarray."""
+    return np.atleast_1d(np.asarray(value))
+
+
 def _broadcast_arguments(**kwargs):
     lengths = {len(value) for value in kwargs.values() if _is_sequence(value)}
     if not lengths:
@@ -66,25 +77,25 @@ def _broadcast_arguments(**kwargs):
     return True, broadcast
 
 
-def _calculate_photoload_biomass(pl_code: str, pct_cvr: float, height: float) -> float:
+def _calculate_photoload_biomass(pl_code: str, pct_cvr, height):
     if pl_code == 'AMAL':
-        return (height / 35.56) * 0.0148 * math.exp(0.0454 * pct_cvr)
+        return (height / 35.56) * 0.0148 * np.exp(0.0454 * pct_cvr)
     if pl_code in {'BERE', 'MARE'}:
         return (height / 10.16) * 0.0013 * pct_cvr
     if pl_code == 'SYAL':
-        return (height / 35.56) * 0.0107 * math.exp(0.0442 * pct_cvr)
+        return (height / 35.56) * 0.0107 * np.exp(0.0442 * pct_cvr)
     if pl_code == 'VAGL':
         return (height / 35.56) * 0.0052 * pct_cvr
     if pl_code == 'VASC':
-        return (height / 17.78) * 0.0135 * math.exp(0.035 * pct_cvr)
+        return (height / 17.78) * 0.0135 * np.exp(0.035 * pct_cvr)
     if pl_code == 'ARLA':
-        return (height / 30.48) * ((0.000008 * pct_cvr * pct_cvr) + (0.0006 * pct_cvr) + 0.0022)
+        return (height / 30.48) * ((0.000008 * pct_cvr ** 2) + (0.0006 * pct_cvr) + 0.0022)
     if pl_code == 'CARU':
-        return (height / 20.3) * 0.0194 * math.exp(0.0282 * pct_cvr)
+        return (height / 20.3) * 0.0194 * np.exp(0.0282 * pct_cvr)
     if pl_code == 'FESC':
-        return (height / 30.5) * 0.0188 * math.exp(0.0298 * pct_cvr)
+        return (height / 30.5) * 0.0188 * np.exp(0.0298 * pct_cvr)
     if pl_code == 'XETE':
-        return (height / 25.4) * 0.0154 * math.exp(0.0444 * pct_cvr)
+        return (height / 25.4) * 0.0154 * np.exp(0.0444 * pct_cvr)
     warnings.warn(f'Photoload species code "{pl_code}" is invalid. Biomass returned as 0.')
     return 0.0
 
@@ -165,9 +176,13 @@ def _normalize_components(components: Union[str, Sequence[str]]) -> list[str]:
     return component_list
 
 
-def _normalize_depth(depth: Optional[Union[int, float, Sequence[Union[int, float]]]], name: str):
+def _normalize_depth(depth: Optional[Union[int, float, np.ndarray]], name: str):
     if depth is None:
         return None
+    if isinstance(depth, np.ndarray):
+        if not np.issubdtype(depth.dtype, np.number):
+            raise TypeError(f'"{name}" values must be numeric and expressed in cm')
+        return depth / 100.0
     if _is_sequence(depth):
         normalized = []
         for value in depth:
@@ -177,7 +192,7 @@ def _normalize_depth(depth: Optional[Union[int, float, Sequence[Union[int, float
         return normalized
     if not isinstance(depth, Real):
         raise TypeError(f'"{name}" must be numeric and expressed in cm')
-    return depth / 100
+    return depth / 100.0
 
 
 def _resolve_photoload_height(pl_code: str, height: Optional[float]) -> Optional[float]:

@@ -1,6 +1,12 @@
 import math
+import numpy as np
+from pathlib import Path
+import sys
 import unittest
 import warnings
+
+PROJ_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(PROJ_ROOT / 'src'))
 
 import biomass
 
@@ -11,49 +17,136 @@ class GetTreeBiomassTests(unittest.TestCase):
         expected = 0.0564 * math.pow(30.0, 2.4465)
         self.assertAlmostEqual(result, expected, places=9)
 
-    def test_vectorized_tree_biomass_returns_list_of_tuples(self):
+    def test_scalar_input_returns_float(self):
+        result = biomass.getTreeBiomass('PY', 1, 'wood', 30.0)
+        self.assertIsInstance(result, float)
+        expected = 0.0564 * math.pow(30.0, 2.4465)
+        self.assertAlmostEqual(result, expected, places=9)
+
+    def test_array_single_component_returns_ndarray(self):
         result = biomass.getTreeBiomass(
-            ['PY', 'FDI'],
-            [1, 4],
+            np.array(['PY', 'FDI']),
+            np.array([1, 1]),
+            'wood',
+            np.array([30.0, 40.0]),
+        )
+        self.assertIsInstance(result, np.ndarray)
+        self.assertEqual(result.shape, (2,))
+
+    def test_array_values_match_scalar_calls(self):
+        result = biomass.getTreeBiomass(
+            np.array(['PY', 'FDI']),
+            np.array([1, 1]),
+            'wood',
+            np.array([30.0, 40.0]),
+        )
+        expected_py = biomass.getTreeBiomass('PY', 1, 'wood', 30.0)
+        expected_fdi = biomass.getTreeBiomass('FDI', 1, 'wood', 40.0)
+        self.assertAlmostEqual(float(result[0]), expected_py, places=9)
+        self.assertAlmostEqual(float(result[1]), expected_fdi, places=9)
+
+    def test_array_multi_component_returns_tuple_of_ndarrays(self):
+        result = biomass.getTreeBiomass(
+            np.array(['PY', 'FDI']),
+            np.array([1, 1]),
+            ['wood', 'bark'],
+            np.array([30.0, 40.0]),
+        )
+        self.assertIsInstance(result, tuple)
+        self.assertEqual(len(result), 2)
+        self.assertIsInstance(result[0], np.ndarray)
+        self.assertIsInstance(result[1], np.ndarray)
+
+    def test_mixed_scalar_array_input_returns_ndarray(self):
+        result = biomass.getTreeBiomass(
+            'PY',
+            1,
+            'wood',
+            np.array([30.0, 40.0]),
+        )
+        self.assertIsInstance(result, np.ndarray)
+        self.assertEqual(result.shape, (2,))
+
+    def test_array_with_height_uses_dbh_ht_coefficients(self):
+        result = biomass.getTreeBiomass(
+            np.array(['PY', 'PY']),
+            np.array([1, 1]),
+            'wood',
+            np.array([30.0, 30.0]),
+            np.array([15.0, 15.0]),
+        )
+        py = biomass.BIOMASS_DATA['PY']
+        expected = (
+            biomass.SOFTWOOD_DECAY[1][biomass.TREE_COMPONENT_INDEX['wood']]
+            * py['BIOMASS_DBH-HT_Bwood1']
+            * math.pow(30.0, py['BIOMASS_DBH-HT_Bwood2'])
+            * math.pow(15.0, py['BIOMASS_DBH-HT_Bwood3'])
+        )
+        self.assertAlmostEqual(float(result[0]), expected, places=9)
+        self.assertAlmostEqual(float(result[1]), expected, places=9)
+
+    def test_array_mismatched_lengths_raises(self):
+        with self.assertRaises(ValueError):
+            biomass.getTreeBiomass(
+                np.array(['PY', 'FDI']),
+                np.array([1]),
+                'wood',
+                np.array([30.0, 40.0]),
+            )
+
+    def test_vectorized_tree_biomass_returns_tuple_of_ndarrays(self):
+        result = biomass.getTreeBiomass(
+            np.array(['PY', 'FDI']),
+            np.array([1, 4]),
             ['wood', 'foliage'],
-            [30.0, 40.0],
-            [15.0, 20.0],
+            np.array([30.0, 40.0]),
+            np.array([15.0, 20.0]),
         )
 
         py = biomass.BIOMASS_DATA['PY']
         fdi = biomass.BIOMASS_DATA['FDI']
-        expected = [
-            (
-                biomass.SOFTWOOD_DECAY[1][biomass.TREE_COMPONENT_INDEX['wood']]
-                * py['BIOMASS_DBH-HT_Bwood1']
-                * math.pow(30.0, py['BIOMASS_DBH-HT_Bwood2'])
-                * math.pow(15.0, py['BIOMASS_DBH-HT_Bwood3']),
-                biomass.SOFTWOOD_DECAY[1][biomass.TREE_COMPONENT_INDEX['foliage']]
-                * py['BIOMASS_DBH-HT_Bfoliage1']
-                * math.pow(30.0, py['BIOMASS_DBH-HT_Bfoliage2'])
-                * math.pow(15.0, py['BIOMASS_DBH-HT_Bfoliage3']),
-            ),
-            (
-                biomass.SOFTWOOD_DECAY[4][biomass.TREE_COMPONENT_INDEX['wood']]
-                * fdi['BIOMASS_DBH-HT_Bwood1']
-                * math.pow(40.0, fdi['BIOMASS_DBH-HT_Bwood2'])
-                * math.pow(20.0, fdi['BIOMASS_DBH-HT_Bwood3']),
-                biomass.SOFTWOOD_DECAY[4][biomass.TREE_COMPONENT_INDEX['foliage']]
-                * fdi['BIOMASS_DBH-HT_Bfoliage1']
-                * math.pow(40.0, fdi['BIOMASS_DBH-HT_Bfoliage2'])
-                * math.pow(20.0, fdi['BIOMASS_DBH-HT_Bfoliage3']),
-            ),
-        ]
+        expected_py_wood = (
+            biomass.SOFTWOOD_DECAY[1][biomass.TREE_COMPONENT_INDEX['wood']]
+            * py['BIOMASS_DBH-HT_Bwood1']
+            * math.pow(30.0, py['BIOMASS_DBH-HT_Bwood2'])
+            * math.pow(15.0, py['BIOMASS_DBH-HT_Bwood3'])
+        )
+        expected_py_foliage = (
+            biomass.SOFTWOOD_DECAY[1][biomass.TREE_COMPONENT_INDEX['foliage']]
+            * py['BIOMASS_DBH-HT_Bfoliage1']
+            * math.pow(30.0, py['BIOMASS_DBH-HT_Bfoliage2'])
+            * math.pow(15.0, py['BIOMASS_DBH-HT_Bfoliage3'])
+        )
+        expected_fdi_wood = (
+            biomass.SOFTWOOD_DECAY[4][biomass.TREE_COMPONENT_INDEX['wood']]
+            * fdi['BIOMASS_DBH-HT_Bwood1']
+            * math.pow(40.0, fdi['BIOMASS_DBH-HT_Bwood2'])
+            * math.pow(20.0, fdi['BIOMASS_DBH-HT_Bwood3'])
+        )
+        expected_fdi_foliage = (
+            biomass.SOFTWOOD_DECAY[4][biomass.TREE_COMPONENT_INDEX['foliage']]
+            * fdi['BIOMASS_DBH-HT_Bfoliage1']
+            * math.pow(40.0, fdi['BIOMASS_DBH-HT_Bfoliage2'])
+            * math.pow(20.0, fdi['BIOMASS_DBH-HT_Bfoliage3'])
+        )
 
+        self.assertIsInstance(result, tuple)
         self.assertEqual(len(result), 2)
-        for actual_row, expected_row in zip(result, expected):
-            self.assertEqual(len(actual_row), 2)
-            for actual, expected_value in zip(actual_row, expected_row):
-                self.assertAlmostEqual(actual, expected_value, places=9)
+        self.assertIsInstance(result[0], np.ndarray)
+        self.assertIsInstance(result[1], np.ndarray)
+        self.assertAlmostEqual(float(result[0][0]), expected_py_wood, places=9)
+        self.assertAlmostEqual(float(result[1][0]), expected_py_foliage, places=9)
+        self.assertAlmostEqual(float(result[0][1]), expected_fdi_wood, places=9)
+        self.assertAlmostEqual(float(result[1][1]), expected_fdi_foliage, places=9)
 
     def test_rejects_mismatched_vector_lengths(self):
         with self.assertRaises(ValueError):
-            biomass.getTreeBiomass(['PY', 'FDI'], [1], 'wood', [30.0, 40.0])
+            biomass.getTreeBiomass(
+                np.array(['PY', 'FDI']),
+                np.array([1]),
+                'wood',
+                np.array([30.0, 40.0]),
+            )
 
 
 class GetPhotoloadBiomassTests(unittest.TestCase):

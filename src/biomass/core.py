@@ -300,47 +300,114 @@ def getPhotoloadBiomass(
 
 
 def getTreeBiomass(
-    spp: Union[str, Sequence[str]],
-    decayclass: Union[int, Sequence[int]],
+    spp: Union[str, np.ndarray],
+    decayclass: Union[int, np.ndarray],
     components: Union[str, Sequence[str]],
-    dbh: Union[float, Sequence[float]],
-    height: Optional[Union[float, Sequence[Optional[float]]]] = None,
-) -> Union[float, tuple[float, ...], list[float], list[tuple[float, ...]]]:
+    dbh: Union[float, np.ndarray],
+    height: Optional[Union[float, np.ndarray]] = None,
+) -> Union[float, tuple[float, ...], np.ndarray, tuple[np.ndarray, ...]]:
     """
     Return species-specific biomass values for tree components using Canadian National Biomass equations.
 
-    Scalar and vector inputs are supported for ``spp``, ``decayclass``, ``dbh``, and ``height``.
-    Vector inputs must all have the same length. When vectorized, results are returned in input order:
-    a list of floats for a single component, or a list of tuples for multiple components.
+    Parameters
+    ----------
+    spp : str or np.ndarray
+        Species code or 1-D array of species codes.
+    decayclass : int or np.ndarray
+        Decay class integer or 1-D array of decay class integers.
+        Valid range is 1-9 for softwood species and 1-6 for hardwood species.
+    components : str or sequence of str
+        One or more of 'wood', 'bark', 'branches', 'foliage'.
+    dbh : float or np.ndarray
+        Diameter at breast height in cm. Scalar or 1-D array.
+    height : float or np.ndarray, optional
+        Tree height in m. Scalar or 1-D array. When omitted, the DBH-only
+        allometric equation is used for all trees in the call.
+
+    Returns
+    -------
+    float
+        When all inputs are scalars and a single component is requested.
+    tuple of float
+        When all inputs are scalars and multiple components are requested.
+    np.ndarray
+        When any input is np.ndarray and a single component is requested.
+    tuple of np.ndarray
+        When any input is np.ndarray and multiple components are requested.
+
+    Raises
+    ------
+    ValueError
+        If an unknown species code is given, if the decay class is out of range
+        for the species type, or if array inputs have mismatched lengths.
+    TypeError
+        If components is not a string or sequence of strings.
     """
     component_list = _normalize_components(components)
-    is_vectorized, args = _broadcast_arguments(spp=spp, decayclass=decayclass, dbh=dbh, height=height)
+    return_array = _any_array(spp, decayclass, dbh, height)
 
-    results = []
-    for species, decay, diameter, tree_height in zip(
-        args['spp'], args['decayclass'], args['dbh'], args['height']
-    ):
-        row = _get_species_row(species)
-        decay_vector = _get_decay_vector(species, decay)
-        values = []
+    spp_arr = _to_1d_array(spp)
+    dc_arr = _to_1d_array(decayclass).astype(int)
+    dbh_arr = _to_1d_array(dbh).astype(float)
+    ht_arr = _to_1d_array(height).astype(float) if height is not None else None
 
-        for component in component_list:
-            decay_factor = decay_vector[TREE_COMPONENT_INDEX[component]]
-            if tree_height is None:
-                biomass = (
-                    decay_factor
-                    * row[f'BIOMASS_DBH_B{component}1']
-                    * math.pow(diameter, row[f'BIOMASS_DBH_B{component}2'])
-                )
-            else:
-                biomass = (
-                    decay_factor
-                    * row[f'BIOMASS_DBH-HT_B{component}1']
-                    * math.pow(diameter, row[f'BIOMASS_DBH-HT_B{component}2'])
-                    * math.pow(tree_height, row[f'BIOMASS_DBH-HT_B{component}3'])
-                )
-            values.append(biomass)
+    # Validate that explicitly-provided ndarray inputs all share the same length.
+    # Scalar inputs (non-ndarray) are allowed to broadcast freely.
+    explicit_array_inputs = [x for x in (spp, decayclass, dbh, height) if isinstance(x, np.ndarray)]
+    explicit_lengths = {arr.shape[0] for arr in explicit_array_inputs}
+    if len(explicit_lengths) > 1:
+        raise ValueError('Vector inputs must all be the same length')
 
-        results.append(values[0] if isinstance(components, str) else tuple(values))
+    # Determine n from multi-element arrays; broadcast length-1 arrays (from scalars)
+    candidate_arrs = [spp_arr, dc_arr, dbh_arr]
+    if ht_arr is not None:
+        candidate_arrs.append(ht_arr)
+    multi_lengths = {arr.shape[0] for arr in candidate_arrs if arr.shape[0] > 1}
+    n = multi_lengths.pop() if multi_lengths else 1
 
-    return _as_scalar_or_vector(results, is_vectorized)
+    spp_arr = np.repeat(spp_arr, n) if spp_arr.shape[0] == 1 else spp_arr
+    dc_arr = np.repeat(dc_arr, n) if dc_arr.shape[0] == 1 else dc_arr
+    dbh_arr = np.repeat(dbh_arr, n) if dbh_arr.shape[0] == 1 else dbh_arr
+    if ht_arr is not None:
+        ht_arr = np.repeat(ht_arr, n) if ht_arr.shape[0] == 1 else ht_arr
+
+    outputs = {comp: np.zeros(n) for comp in component_list}
+
+    for species in np.unique(spp_arr):
+        species_str = str(species)
+        species_mask = (spp_arr == species)
+        row = _get_species_row(species_str)
+        decay_lookup = SOFTWOOD_DECAY if species_str in SOFTWOOD_SPECIES else HARDWOOD_DECAY
+
+        for dc in np.unique(dc_arr[species_mask]):
+            dc_mask = species_mask & (dc_arr == dc)
+            try:
+                decay_vector = decay_lookup[int(dc)]
+            except KeyError as exc:
+                tree_type = 'softwood' if species_str in SOFTWOOD_SPECIES else 'hardwood'
+                raise ValueError(
+                    f'Invalid decay class "{dc}" for {tree_type} species "{species_str}"'
+                ) from exc
+
+            for component in component_list:
+                decay_factor = decay_vector[TREE_COMPONENT_INDEX[component]]
+                if ht_arr is None:
+                    outputs[component][dc_mask] = (
+                        decay_factor
+                        * row[f'BIOMASS_DBH_B{component}1']
+                        * np.power(dbh_arr[dc_mask], row[f'BIOMASS_DBH_B{component}2'])
+                    )
+                else:
+                    outputs[component][dc_mask] = (
+                        decay_factor
+                        * row[f'BIOMASS_DBH-HT_B{component}1']
+                        * np.power(dbh_arr[dc_mask], row[f'BIOMASS_DBH-HT_B{component}2'])
+                        * np.power(ht_arr[dc_mask], row[f'BIOMASS_DBH-HT_B{component}3'])
+                    )
+
+    if isinstance(components, str):
+        result = outputs[component_list[0]]
+        return result if return_array else float(result[0])
+    else:
+        arrays = tuple(outputs[comp] for comp in component_list)
+        return arrays if return_array else tuple(float(arr[0]) for arr in arrays)

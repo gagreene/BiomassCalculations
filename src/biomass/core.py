@@ -270,33 +270,109 @@ def getDuffLitterBiomass(
 
 
 def getPhotoloadBiomass(
-    pl_code: Union[str, Sequence[str]],
-    pct_cvr: Union[float, Sequence[float]],
-    height: Optional[Union[float, Sequence[Optional[float]]]] = None,
-) -> Union[float, list[float]]:
+    pl_code: Union[str, np.ndarray],
+    pct_cvr: Union[float, np.ndarray],
+    height: Optional[Union[float, np.ndarray]] = None,
+) -> Union[float, np.ndarray]:
     """
-    Estimate Photoload biomass in kg/m2.
+    Estimate Photoload biomass in kg/m².
 
-    Scalar and vector inputs are supported for ``pl_code``, ``pct_cvr``, and ``height``.
-    Vector inputs must all have the same length.
+    Parameters
+    ----------
+    pl_code : str or np.ndarray
+        Photoload species code or 1-D array of species codes.
+        Supported codes: 'AMAL', 'BERE', 'MARE', 'SYAL', 'VAGL', 'VASC',
+        'ARLA', 'CARU', 'FESC', 'XETE'. Invalid codes produce a warning and
+        return 0.0 for the affected elements.
+    pct_cvr : float or np.ndarray
+        Percent cover (0-100). Scalar or 1-D array.
+    height : float or np.ndarray, optional
+        Canopy height in cm. Scalar or 1-D array. Pass ``None`` to use the
+        default height for all elements. Within an array, use ``np.nan`` to
+        use the species default height for individual elements.
+
+    Returns
+    -------
+    float
+        When all inputs are scalars.
+    np.ndarray
+        When any input is np.ndarray.
+
+    Raises
+    ------
+    ValueError
+        If array inputs have mismatched lengths or if an ndarray is not 1-D.
+    TypeError
+        If plain sequences (list, tuple) are passed instead of np.ndarray.
     """
-    is_vectorized, args = _broadcast_arguments(pl_code=pl_code, pct_cvr=pct_cvr, height=height)
+    # Validate: reject plain sequences and 0-D arrays
+    for _name, _val in [('pl_code', pl_code), ('pct_cvr', pct_cvr)] + (
+        [('height', height)] if height is not None else []
+    ):
+        if isinstance(_val, Sequence) and not isinstance(_val, (str, bytes, bytearray)):
+            raise TypeError(
+                f'"{_name}" does not accept plain sequences; use np.array() to convert'
+            )
+        if isinstance(_val, np.ndarray) and _val.ndim != 1:
+            raise ValueError(f'"{_name}" must be a 1-D array, got shape {_val.shape}')
 
-    results = []
-    for species, cover, species_height in zip(args['pl_code'], args['pct_cvr'], args['height']):
-        if cover == 0 or species_height == 0:
-            results.append(0.0)
-            continue
+    return_array = _any_array(pl_code, pct_cvr, height)
 
-        resolved_height = _resolve_photoload_height(species, species_height)
-        if resolved_height is None:
-            warnings.warn(f'Photoload species code "{species}" is invalid. Biomass returned as 0.')
-            results.append(0.0)
-            continue
+    pl_code_arr = _to_1d_array(pl_code)
+    pct_cvr_arr = _to_1d_array(pct_cvr).astype(float)
 
-        results.append(_calculate_photoload_biomass(species, cover, resolved_height))
+    # height=None → all defaults (represented internally as nan)
+    if height is None:
+        ht_arr = np.full(pl_code_arr.shape[0], np.nan)
+    else:
+        ht_arr = _to_1d_array(height).astype(float)
 
-    return _as_scalar_or_vector(results, is_vectorized)
+    # Broadcast length-1 arrays to match multi-element arrays
+    candidate_arrs = [pl_code_arr, pct_cvr_arr, ht_arr]
+    explicit_array_inputs = [x for x in (pl_code, pct_cvr, height) if isinstance(x, np.ndarray)]
+    explicit_lengths = {arr.shape[0] for arr in explicit_array_inputs}
+    if len(explicit_lengths) > 1:
+        raise ValueError('Vector inputs must all be the same length')
+    multi_lengths = {arr.shape[0] for arr in candidate_arrs if arr.shape[0] > 1}
+    if len(multi_lengths) > 1:
+        raise ValueError('Vector inputs must all be the same length')
+    n = multi_lengths.pop() if multi_lengths else 1
+
+    pl_code_arr = np.repeat(pl_code_arr, n) if pl_code_arr.shape[0] == 1 else pl_code_arr
+    pct_cvr_arr = np.repeat(pct_cvr_arr, n) if pct_cvr_arr.shape[0] == 1 else pct_cvr_arr
+    ht_arr = np.repeat(ht_arr, n) if ht_arr.shape[0] == 1 else ht_arr
+
+    output = np.zeros(n)
+
+    for code in np.unique(pl_code_arr):
+        code_str = str(code)
+        code_mask = (pl_code_arr == code)
+        default_height = PHOTOLOAD_DEFAULT_HEIGHTS.get(code_str)
+
+        h_slice = ht_arr[code_mask]
+        pct_slice = pct_cvr_arr[code_mask]
+
+        # Replace nan with the code's default height; if no default, nan remains
+        if default_height is not None:
+            resolved = np.where(np.isnan(h_slice), default_height, h_slice)
+        else:
+            resolved = h_slice.copy()
+
+        if np.any(np.isnan(resolved)):
+            warnings.warn(f'Photoload species code "{code_str}" is invalid. Biomass returned as 0.')
+            resolved = np.where(np.isnan(resolved), 0.0, resolved)
+
+        zero_mask = (pct_slice == 0) | (resolved == 0)
+        active = ~zero_mask
+
+        if np.any(active):
+            result_slice = np.zeros(int(np.sum(code_mask)))
+            result_slice[active] = _calculate_photoload_biomass(
+                code_str, pct_slice[active], resolved[active]
+            )
+            output[code_mask] = result_slice
+
+    return output if return_array else float(output[0])
 
 
 def getTreeBiomass(

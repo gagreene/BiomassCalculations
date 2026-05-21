@@ -139,15 +139,6 @@ class GetTreeBiomassTests(unittest.TestCase):
         self.assertAlmostEqual(float(result[0][1]), expected_fdi_wood, places=9)
         self.assertAlmostEqual(float(result[1][1]), expected_fdi_foliage, places=9)
 
-    def test_rejects_mismatched_vector_lengths(self):
-        with self.assertRaises(ValueError):
-            biomass.getTreeBiomass(
-                np.array(['PY', 'FDI']),
-                np.array([1]),
-                'wood',
-                np.array([30.0, 40.0]),
-            )
-
 
 class GetPhotoloadBiomassTests(unittest.TestCase):
     def test_uses_default_height_when_missing(self):

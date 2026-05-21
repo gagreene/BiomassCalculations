@@ -344,6 +344,23 @@ def getTreeBiomass(
         If components is not a string or sequence of strings.
     """
     component_list = _normalize_components(components)
+
+    # Reject non-1-D ndarrays (e.g. 0-D scalars wrapped in np.array) before any conversion.
+    for _name, _val in [('spp', spp), ('decayclass', decayclass), ('dbh', dbh)] + (
+        [('height', height)] if isinstance(height, np.ndarray) else []
+    ):
+        if isinstance(_val, np.ndarray) and _val.ndim != 1:
+            raise ValueError(f'"{_name}" must be a 1-D array, got shape {_val.shape}')
+
+    # Reject plain Python sequences — callers must use np.array() for vector inputs.
+    for _name, _val in [('spp', spp), ('decayclass', decayclass), ('dbh', dbh)] + (
+        [('height', height)] if height is not None else []
+    ):
+        if isinstance(_val, Sequence) and not isinstance(_val, (str, bytes, bytearray)):
+            raise TypeError(
+                f'"{_name}" does not accept plain sequences; use np.array() to convert'
+            )
+
     return_array = _any_array(spp, decayclass, dbh, height)
 
     spp_arr = _to_1d_array(spp)
@@ -353,15 +370,15 @@ def getTreeBiomass(
 
     # Validate that explicitly-provided ndarray inputs all share the same length.
     # Scalar inputs (non-ndarray) are allowed to broadcast freely.
-    explicit_array_inputs = [x for x in (spp, decayclass, dbh, height) if isinstance(x, np.ndarray)]
-    explicit_lengths = {arr.shape[0] for arr in explicit_array_inputs}
+    explicit_pairs = [('spp', spp, spp_arr), ('decayclass', decayclass, dc_arr), ('dbh', dbh, dbh_arr)]
+    if ht_arr is not None:
+        explicit_pairs.append(('height', height, ht_arr))
+    explicit_lengths = {arr.shape[0] for _, orig, arr in explicit_pairs if isinstance(orig, np.ndarray)}
     if len(explicit_lengths) > 1:
         raise ValueError('Vector inputs must all be the same length')
 
-    # Determine n from multi-element arrays; broadcast length-1 arrays (from scalars)
-    candidate_arrs = [spp_arr, dc_arr, dbh_arr]
-    if ht_arr is not None:
-        candidate_arrs.append(ht_arr)
+    # Determine n from multi-element arrays; broadcast length-1 arrays (from scalars).
+    candidate_arrs = [spp_arr, dc_arr, dbh_arr] + ([ht_arr] if ht_arr is not None else [])
     multi_lengths = {arr.shape[0] for arr in candidate_arrs if arr.shape[0] > 1}
     n = multi_lengths.pop() if multi_lengths else 1
 

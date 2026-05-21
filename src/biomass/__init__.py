@@ -6,9 +6,9 @@ from .core import (
     SOFTWOOD_SPECIES,
     TREE_COMPONENT_INDEX,
     TREE_COMPONENTS,
-    getDuffLitterBiomass,
-    getPhotoloadBiomass,
-    getTreeBiomass,
+    get_duff_litter_biomass,
+    get_photoload_biomass,
+    get_tree_biomass,
 )
 
 __author__ = ['Gregory A. Greene, map.n.trowel@gmail.com']
@@ -22,7 +22,7 @@ __all__ = [
     'SOFTWOOD_SPECIES',
     'TREE_COMPONENT_INDEX',
     'TREE_COMPONENTS',
-    'getDuffLitterBiomass',
-    'getPhotoloadBiomass',
-    'getTreeBiomass',
+    'get_duff_litter_biomass',
+    'get_photoload_biomass',
+    'get_tree_biomass',
 ]

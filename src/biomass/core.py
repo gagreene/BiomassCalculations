@@ -177,7 +177,7 @@ BIOMASS_DATA = _load_biomass_data(DATA_PATH)
 SOFTWOOD_SPECIES = {species for species, row in BIOMASS_DATA.items() if row['TreeType'] == 'softwood'}
 
 
-def getDuffLitterBiomass(
+def get_duff_litter_biomass(
     spp: Union[str, Sequence[str]],
     pct_list: Optional[Sequence[float]] = None,
     return_type: str = 'bulk_density',
@@ -272,7 +272,7 @@ def getDuffLitterBiomass(
         return np.atleast_1d(result) if return_array else float(result)
 
 
-def getPhotoloadBiomass(
+def get_photoload_biomass(
     pl_code: Union[str, np.ndarray],
     pct_cvr: Union[float, np.ndarray],
     height: Optional[Union[float, np.ndarray]] = None,
@@ -383,7 +383,7 @@ def getPhotoloadBiomass(
     return output if return_array else float(output[0])
 
 
-def getTreeBiomass(
+def get_tree_biomass(
     spp: Union[str, np.ndarray],
     decayclass: Union[int, np.ndarray],
     components: Union[str, Sequence[str]],

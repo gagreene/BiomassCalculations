@@ -59,24 +59,24 @@ The runtime shape is therefore:
   - `unittest` suite for the public API
   - Adds `src/` to `sys.path` and imports `biomass` directly
   - Covers scalar and vector behavior for:
-    - `getTreeBiomass`
-    - `getPhotoloadBiomass`
-    - `getDuffLitterBiomass`
+    - `get_tree_biomass`
+    - `get_photoload_biomass`
+    - `get_duff_litter_biomass`
 
 
 ## Public API
 
 The current public surface is exposed through `src/biomass/__init__.py` and implemented in `src/biomass/core.py`:
 
-- `getDuffLitterBiomass(...)`
+- `get_duff_litter_biomass(...)`
   - Returns duff/litter bulk density or biomass
   - Supports single-species and weighted species-mix calculations
 
-- `getPhotoloadBiomass(...)`
+- `get_photoload_biomass(...)`
   - Returns biomass estimates for Photoload-coded plants
   - Supports scalar and vector inputs
 
-- `getTreeBiomass(...)`
+- `get_tree_biomass(...)`
   - Returns biomass estimates for tree components
   - Supports scalar and vector inputs
 
@@ -124,9 +124,9 @@ flowchart TD
     A --> G[Call public function]
 
     G --> H{Function}
-    H -->|getTreeBiomass| I[Normalize components\nBroadcast spp/decayclass/dbh/height]
-    H -->|getPhotoloadBiomass| J[Broadcast pl_code/pct_cvr/height]
-    H -->|getDuffLitterBiomass| K[Validate species mix\nLookup bulk density from BIOMASS_DATA\nWeight if multi-species]
+    H -->|get_tree_biomass| I[Normalize components\nBroadcast spp/decayclass/dbh/height]
+    H -->|get_photoload_biomass| J[Broadcast pl_code/pct_cvr/height]
+    H -->|get_duff_litter_biomass| K[Validate species mix\nLookup bulk density from BIOMASS_DATA\nWeight if multi-species]
 
     I --> L[Species row from BIOMASS_DATA]
     I --> M[Decay vector from SOFTWOOD_DECAY\nor HARDWOOD_DECAY]
@@ -201,8 +201,8 @@ The public functions return different shapes based on the inputs:
 
 - scalar inputs return scalar-like values (`float` or `tuple[float, ...]`)
 - `np.ndarray` inputs return `np.ndarray` or `tuple[np.ndarray, ...]`
-- for `getTreeBiomass` with multiple components, the return is always a tuple (of floats or ndarrays)
-- for `getDuffLitterBiomass`, the return type also depends on whether one or both depths are supplied
+- for `get_tree_biomass` with multiple components, the return is always a tuple (of floats or ndarrays)
+- for `get_duff_litter_biomass`, the return type also depends on whether one or both depths are supplied
 
 Plain Python lists are not supported as vector inputs — pass `np.array(...)` instead.
 
@@ -218,7 +218,7 @@ That is an intentional behavioral distinction in the current code.
 ### Hardwood decay class range is smaller than softwood
 
 `SOFTWOOD_DECAY` defines classes 1–9. `HARDWOOD_DECAY` defines classes 1–6 only.
-Passing `decayclass=7`, `8`, or `9` for a hardwood species raises `ValueError` via the inline decay-class validation in `getTreeBiomass`.
+Passing `decayclass=7`, `8`, or `9` for a hardwood species raises `ValueError` via the inline decay-class validation in `get_tree_biomass`.
 
 ### `pct_list` sum is checked with a tolerance
 
@@ -232,7 +232,7 @@ values outside that range raise `ValueError`.
 bulk density. Bulk density values in the CSV are in kg/m³, so the resulting biomass is in kg/m².
 Callers must supply depths in centimetres or the result will be off by a factor of 100.
 
-### `getDuffLitterBiomass` return shape when only one depth is given
+### `get_duff_litter_biomass` return shape when only one depth is given
 
 When only `duff_depth` or only `litter_depth` is provided (not both), each result element is a
 plain `float`, not a `(duff, litter)` tuple. When both depths are provided, each element is a
@@ -240,7 +240,7 @@ two-element tuple. The return shape therefore depends on which depth arguments a
 
 ### `components` is a fixed set applied to every tree in a vectorized call
 
-In `getTreeBiomass`, `components` is normalized once and applied to all tree records in the batch.
+In `get_tree_biomass`, `components` is normalized once and applied to all tree records in the batch.
 You cannot specify different components for different trees in a single vectorized call.
 `components` applies uniformly to every tree in the batch and is not broadcast per element.
 

@@ -9,14 +9,14 @@ The codebase is centered on one runtime package, `src/biomass/`, with implementa
 
 The library exposes three public functions:
 
-- `getTreeBiomass(...)`
+- `get_tree_biomass(...)`
   - Calculates species-specific biomass for tree components such as wood, bark, branches, and foliage
   - Uses the Canadian National Biomass Equations from Lambert et al. (2005) and Ung et al. (2008)
 
-- `getPhotoloadBiomass(...)`
+- `get_photoload_biomass(...)`
   - Calculates biomass for supported Photoload plant codes
 
-- `getDuffLitterBiomass(...)`
+- `get_duff_litter_biomass(...)`
   - Returns duff/litter bulk density values or biomass estimates
 
 All three functions support scalar inputs and `np.ndarray` inputs.
@@ -131,7 +131,7 @@ PYTHONPATH=src python3 -c "import biomass; print('loaded', biomass.__version__, 
 ```python
 import biomass
 
-value = biomass.getTreeBiomass(
+value = biomass.get_tree_biomass(
     spp='PY',
     decayclass=1,
     components='wood',
@@ -147,7 +147,7 @@ print(value)
 import numpy as np
 import biomass
 
-values = biomass.getTreeBiomass(
+values = biomass.get_tree_biomass(
     spp=np.array(['PY', 'FDI']),
     decayclass=np.array([1, 4]),
     components=['wood', 'foliage'],
@@ -165,11 +165,11 @@ import numpy as np
 import biomass
 
 # Scalar call
-value = biomass.getPhotoloadBiomass('AMAL', 50.0)
+value = biomass.get_photoload_biomass('AMAL', 50.0)
 print(value)  # float
 
 # Array call — pass np.nan in the height array to use the species default height
-values = biomass.getPhotoloadBiomass(
+values = biomass.get_photoload_biomass(
     np.array(['AMAL', 'VAGL']),
     np.array([50.0, 30.0]),
     np.array([35.56, np.nan]),  # np.nan → uses VAGL default height
@@ -182,7 +182,7 @@ print(values)  # np.ndarray
 ```python
 import biomass
 
-value = biomass.getDuffLitterBiomass(
+value = biomass.get_duff_litter_biomass(
     spp=['PY', 'FDI', 'PLI'],
     pct_list=[60.0, 30.0, 10.0],
     return_type='bulk_density',
@@ -198,7 +198,7 @@ import numpy as np
 import biomass
 
 # Scalar call
-value = biomass.getDuffLitterBiomass(
+value = biomass.get_duff_litter_biomass(
     spp='PY',
     return_type='biomass',
     duff_depth=3.4,
@@ -207,7 +207,7 @@ value = biomass.getDuffLitterBiomass(
 print(value)  # (duff_biomass_float, litter_biomass_float)
 
 # Array call — pass depth arrays to compute biomass for multiple plots
-values = biomass.getDuffLitterBiomass(
+values = biomass.get_duff_litter_biomass(
     spp='PY',
     return_type='biomass',
     duff_depth=np.array([3.4, 5.0, 2.1]),
@@ -259,7 +259,7 @@ conda build conda-recipe
 
 ## Public API
 
-### `getTreeBiomass`
+### `get_tree_biomass`
 
 Calculates tree biomass for one or more species records.
 
@@ -278,7 +278,7 @@ Returns:
 - a `np.ndarray` for a single component array call
 - a `tuple[np.ndarray, ...]` for a multi-component array call
 
-### `getPhotoloadBiomass`
+### `get_photoload_biomass`
 
 Calculates Photoload biomass for one or more records.
 
@@ -288,7 +288,7 @@ Inputs:
 - `pct_cvr`
 - optional `height`
 
-### `getDuffLitterBiomass`
+### `get_duff_litter_biomass`
 
 Returns bulk density or biomass for duff/litter.
 
@@ -314,7 +314,7 @@ import numpy as np
 import biomass
 
 # Scalar spp and decayclass broadcast across array dbh
-result = biomass.getTreeBiomass('PY', 1, 'wood', np.array([20.0, 30.0, 40.0]))
+result = biomass.get_tree_biomass('PY', 1, 'wood', np.array([20.0, 30.0, 40.0]))
 # result is a np.ndarray of shape (3,)
 ```
 

@@ -109,6 +109,25 @@ python -m pip install .
 
 If you are working directly from the repo, you can still run with `src/` on `PYTHONPATH`.
 
+Windows PowerShell:
+
+```powershell
+$env:PYTHONPATH = "src"
+python -c "import biomass; print('loaded', biomass.__version__, len(biomass.BIOMASS_DATA))"
+```
+
+Single-command variant (does not persist `PYTHONPATH` in your session):
+
+```powershell
+cmd /c "set PYTHONPATH=src && python -c \"import biomass; print('loaded', biomass.__version__, len(biomass.BIOMASS_DATA))\""
+```
+
+macOS/Linux:
+
+```bash
+PYTHONPATH=src python3 -c "import biomass; print('loaded', biomass.__version__, len(biomass.BIOMASS_DATA))"
+```
+
 
 ## Running the Code
 

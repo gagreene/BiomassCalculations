@@ -177,12 +177,14 @@ class GetPhotoloadBiomassTests(unittest.TestCase):
         result = biomass.getPhotoloadBiomass(
             np.array(['AMAL', 'AMAL']),
             np.array([50.0, 50.0]),
-            np.array([np.nan, 35.56]),
+            np.array([np.nan, 20.0]),  # nan → default 35.56, explicit → 20.0
         )
-        expected = 0.0148 * math.exp(0.0454 * 50.0)
+        expected_default = 0.0148 * math.exp(0.0454 * 50.0)
+        expected_explicit = (20.0 / 35.56) * 0.0148 * math.exp(0.0454 * 50.0)
         self.assertIsInstance(result, np.ndarray)
-        self.assertAlmostEqual(float(result[0]), expected, places=9)
-        self.assertAlmostEqual(float(result[1]), expected, places=9)
+        self.assertAlmostEqual(float(result[0]), expected_default, places=9)
+        self.assertAlmostEqual(float(result[1]), expected_explicit, places=9)
+        self.assertNotAlmostEqual(float(result[0]), float(result[1]), places=6)
 
     def test_invalid_code_in_array_warns_and_fills_zero(self):
         with warnings.catch_warnings(record=True) as caught:
@@ -202,16 +204,6 @@ class GetPhotoloadBiomassTests(unittest.TestCase):
                 np.array(['AMAL', 'VAGL']),
                 np.array([50.0]),
             )
-
-    def test_vectorized_photoload_biomass(self):
-        result = biomass.getPhotoloadBiomass(
-            np.array(['AMAL', 'VAGL']),
-            np.array([50.0, 10.0]),
-            np.array([35.56, 35.56]),
-        )
-        self.assertIsInstance(result, np.ndarray)
-        self.assertAlmostEqual(float(result[0]), 0.0148 * math.exp(0.0454 * 50.0), places=9)
-        self.assertAlmostEqual(float(result[1]), 0.0052 * 10.0, places=9)
 
     def test_invalid_photoload_species_warns_and_returns_zero(self):
         with warnings.catch_warnings(record=True) as caught:

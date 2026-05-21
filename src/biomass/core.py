@@ -195,14 +195,6 @@ def _normalize_depth(depth: Optional[Union[int, float, np.ndarray]], name: str):
     return depth / 100.0
 
 
-def _resolve_photoload_height(pl_code: str, height: Optional[float]) -> Optional[float]:
-    if height == 0:
-        return 0.0
-    if height is None or not _is_finite_number(height):
-        return PHOTOLOAD_DEFAULT_HEIGHTS.get(pl_code)
-    return height
-
-
 def _validate_species_mix(
     spp: Union[str, Sequence[str]],
     pct_list: Optional[Sequence[float]],
@@ -327,13 +319,18 @@ def getPhotoloadBiomass(
     else:
         ht_arr = _to_1d_array(height).astype(float)
 
-    # Broadcast length-1 arrays to match multi-element arrays
-    candidate_arrs = [pl_code_arr, pct_cvr_arr, ht_arr]
-    explicit_array_inputs = [x for x in (pl_code, pct_cvr, height) if isinstance(x, np.ndarray)]
-    explicit_lengths = {arr.shape[0] for arr in explicit_array_inputs}
-    if len(explicit_lengths) > 1:
+    # Raise early if two caller-supplied ndarrays have different lengths
+    explicit_ndarray_lengths = {
+        arr.shape[0]
+        for val, arr in [(pl_code, pl_code_arr), (pct_cvr, pct_cvr_arr)]
+        + ([(height, ht_arr)] if isinstance(height, np.ndarray) else [])
+        if isinstance(val, np.ndarray)
+    }
+    if len(explicit_ndarray_lengths) > 1:
         raise ValueError('Vector inputs must all be the same length')
-    multi_lengths = {arr.shape[0] for arr in candidate_arrs if arr.shape[0] > 1}
+
+    # Broadcast length-1 arrays to match multi-element arrays
+    multi_lengths = {arr.shape[0] for arr in [pl_code_arr, pct_cvr_arr, ht_arr] if arr.shape[0] > 1}
     if len(multi_lengths) > 1:
         raise ValueError('Vector inputs must all be the same length')
     n = multi_lengths.pop() if multi_lengths else 1

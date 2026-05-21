@@ -1,0 +1,36 @@
+{% set name = "biomass-calculations" %}
+{% set version = "0.1.0" %}
+
+package:
+  name: {{ name|lower }}
+  version: {{ version }}
+
+source:
+  path: ..
+
+build:
+  noarch: python
+  script: {{ PYTHON }} -m pip install . --no-deps --no-build-isolation -vv
+
+requirements:
+  host:
+    - pip
+    - python >=3.11
+    - setuptools >=69
+    - wheel
+  run:
+    - python >=3.11
+
+test:
+  imports:
+    - biomass
+  commands:
+    - python -m unittest discover -s tests -v
+
+about:
+  summary: Python biomass calculation library backed by bundled species coefficient data.
+  license: LicenseRef-Proprietary
+
+extra:
+  recipe-maintainers:
+    - ggreene

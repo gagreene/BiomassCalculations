@@ -3,11 +3,11 @@ __author__ = ['Gregory A. Greene, map.n.trowel@gmail.com']
 import csv
 import math
 import numpy as np
+import numpy.typing as npt
 import warnings
-from collections.abc import Sequence
 from numbers import Real
 from pathlib import Path
-from typing import Optional, Union
+from typing import Sequence
 
 
 DATA_PATH = Path(__file__).resolve().parent / 'supplementary_data' / 'Biomass_EquationParameters.csv'
@@ -51,7 +51,7 @@ def _any_array(*args) -> bool:
     return any(isinstance(a, np.ndarray) for a in args)
 
 
-def _to_1d_array(value) -> np.ndarray:
+def _to_1d_array(value) -> npt.NDArray:
     """Coerce a scalar or array to a 1-D ndarray."""
     return np.atleast_1d(np.asarray(value))
 
@@ -101,12 +101,12 @@ def _get_species_row(species: str) -> dict[str, Union[str, float]]:
 
 
 def _load_biomass_data(path: Path) -> dict[str, dict[str, Union[str, float]]]:
+    rows: dict[str, dict[str, str | float]] = {}
     with path.open(newline='', encoding='utf-8-sig') as handle:
         reader = csv.DictReader(handle)
-        rows = {}
         for row in reader:
             species = row['Species']
-            parsed = {}
+            parsed: dict[str, str | float] = {}
             for key, value in row.items():
                 if key in {
                     'Species',
@@ -121,7 +121,7 @@ def _load_biomass_data(path: Path) -> dict[str, dict[str, Union[str, float]]]:
                 else:
                     parsed[key] = float(value)
             rows[species] = parsed
-        return rows
+    return rows
 
 
 def _normalize_components(components: Union[str, Sequence[str]]) -> list[str]:

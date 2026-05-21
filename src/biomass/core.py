@@ -47,16 +47,34 @@ PHOTOLOAD_DEFAULT_HEIGHTS = {
 
 
 def _any_array(*args) -> bool:
-    """Return True if any argument is a np.ndarray."""
+    """
+    Return ``True`` if any argument is an ``np.ndarray``.
+
+    :param args: Values to inspect.
+    :return: ``True`` when at least one value is an ``np.ndarray``.
+    """
     return any(isinstance(a, np.ndarray) for a in args)
 
 
 def _to_1d_array(value) -> npt.NDArray:
-    """Coerce a scalar or array to a 1-D ndarray."""
+    """
+    Coerce a scalar or array-like value to a 1-D array.
+
+    :param value: Scalar or array-like input.
+    :return: A 1-D ``np.ndarray`` view of ``value``.
+    """
     return np.atleast_1d(np.asarray(value))
 
 
 def _calculate_photoload_biomass(pl_code: str, pct_cvr, height):
+    """
+    Compute Photoload biomass for a single species code.
+
+    :param pl_code: Photoload species code.
+    :param pct_cvr: Percent cover value(s).
+    :param height: Canopy height value(s) in cm.
+    :return: Biomass estimate(s) in kg/m^2.
+    """
     if pl_code == 'AMAL':
         return (height / 35.56) * 0.0148 * np.exp(0.0454 * pct_cvr)
     if pl_code in {'BERE', 'MARE'}:
@@ -80,6 +98,15 @@ def _calculate_photoload_biomass(pl_code: str, pct_cvr, height):
 
 
 def _get_bulk_density(spp: list[str], pct_list: Optional[list[float]]) -> tuple[float, float]:
+    """
+    Return weighted duff and litter bulk density values for one or more species.
+
+    :param spp: Species code list.
+    :param pct_list: Species percentages aligned to ``spp``; ``None`` means
+        single-species lookup using the first value in ``spp``.
+    :return: ``(duff_bulk_density, litter_bulk_density)`` in kg/m^3.
+    :raises ValueError: If a species code is unknown.
+    """
     if pct_list is None:
         row = _get_species_row(spp[0])
         return float(row['DUFF_BD']), float(row['LITTER_BD'])
@@ -94,6 +121,13 @@ def _get_bulk_density(spp: list[str], pct_list: Optional[list[float]]) -> tuple[
 
 
 def _get_species_row(species: str) -> dict[str, Union[str, float]]:
+    """
+    Fetch the biomass parameter row for a species code.
+
+    :param species: Species code key.
+    :return: Parsed biomass parameter mapping for the species.
+    :raises ValueError: If the species code does not exist in biomass data.
+    """
     try:
         return BIOMASS_DATA[species]
     except KeyError as exc:
@@ -101,6 +135,13 @@ def _get_species_row(species: str) -> dict[str, Union[str, float]]:
 
 
 def _load_biomass_data(path: Path) -> dict[str, dict[str, Union[str, float]]]:
+    """
+    Load and parse biomass equation parameters from CSV.
+
+    :param path: Path to the biomass parameter CSV file.
+    :return: Mapping of species code to parsed parameter dictionary.
+    :raises ValueError: If numeric fields cannot be parsed as floats.
+    """
     rows: dict[str, dict[str, str | float]] = {}
     with path.open(newline='', encoding='utf-8-sig') as handle:
         reader = csv.DictReader(handle)
@@ -125,6 +166,14 @@ def _load_biomass_data(path: Path) -> dict[str, dict[str, Union[str, float]]]:
 
 
 def _normalize_components(components: Union[str, Sequence[str]]) -> list[str]:
+    """
+    Normalize requested tree component input to a validated list.
+
+    :param components: Single component name or sequence of component names.
+    :return: Validated list of component names.
+    :raises TypeError: If ``components`` is not a string or sequence of strings.
+    :raises ValueError: If any component is not in ``TREE_COMPONENTS``.
+    """
     if isinstance(components, str):
         component_list = [components]
     elif isinstance(components, Sequence) and not isinstance(components, (str, bytes, bytearray)):
@@ -139,6 +188,15 @@ def _normalize_components(components: Union[str, Sequence[str]]) -> list[str]:
 
 
 def _normalize_depth(depth: Optional[Union[int, float, np.ndarray]], name: str):
+    """
+    Convert depth values from centimeters to meters.
+
+    :param depth: Depth as scalar, ndarray, or ``None``.
+    :param name: Parameter name used in validation error messages.
+    :return: Depth in meters with original scalar/array semantics, or
+        ``None`` if ``depth`` is ``None``.
+    :raises TypeError: If depth values are non-numeric.
+    """
     if depth is None:
         return None
     if isinstance(depth, np.ndarray):
@@ -154,6 +212,17 @@ def _validate_species_mix(
     spp: Union[str, Sequence[str]],
     pct_list: Optional[Sequence[float]],
 ) -> tuple[list[str], Optional[list[float]]]:
+    """
+    Validate and normalize single- or mixed-species composition inputs.
+
+    :param spp: Species code string or sequence of species codes.
+    :param pct_list: Percentage values corresponding to ``spp`` for mixed stands.
+    :return: ``(species_list, pct_values)`` where ``pct_values`` is ``None``
+        for single-species calls.
+    :raises TypeError: If input types are invalid.
+    :raises ValueError: If percentages are missing, length-mismatched, or do
+        not sum to 100.
+    """
     if isinstance(spp, str):
         return [spp], None
     if not (isinstance(spp, Sequence) and not isinstance(spp, (str, bytes, bytearray))):
@@ -187,51 +256,23 @@ def get_duff_litter_biomass(
     """
     Return duff/litter bulk density values or calculate duff/litter biomass.
 
-    Parameters
-    ----------
-    spp : str or sequence of str
-        Species code or sequence of species codes defining the stand composition.
-        When a sequence is given, ``pct_list`` is required.
-    pct_list : sequence of float, optional
-        Percentage of each species in ``spp``. Values must sum to 100 (±0.5).
-        Required when ``spp`` contains more than one species.
-    return_type : {'bulk_density', 'biomass'}
-        'bulk_density' returns the weighted duff and litter bulk density values
-        in kg/m³. 'biomass' multiplies bulk density by the supplied depths to
-        return biomass in kg/m².
-    duff_depth : int, float, or np.ndarray, optional
-        Duff layer depth in cm. Scalar or 1-D array. Required when
-        ``return_type='biomass'`` and ``litter_depth`` is not given.
-    litter_depth : int, float, or np.ndarray, optional
-        Litter layer depth in cm. Scalar or 1-D array. Required when
-        ``return_type='biomass'`` and ``duff_depth`` is not given.
-
-    Returns
-    -------
-    tuple of float
-        ``(duff_bulk_density, litter_bulk_density)`` in kg/m³ when
-        ``return_type='bulk_density'``.
-    float
-        Biomass in kg/m² when scalar depth inputs and only one depth is given.
-    tuple of float
-        ``(duff_biomass, litter_biomass)`` in kg/m² when scalar depth inputs
-        and both depths are given.
-    np.ndarray
-        Biomass array in kg/m² when any depth input is np.ndarray and only
-        one depth is given.
-    tuple of np.ndarray
-        ``(duff_biomass, litter_biomass)`` arrays in kg/m² when any depth input
-        is np.ndarray and both depths are given.
-
-    Raises
-    ------
-    ValueError
-        If ``return_type`` is invalid, if ``pct_list`` is missing for a
-        multi-species ``spp``, if ``pct_list`` does not sum to 100, or if no
-        depth is provided when ``return_type='biomass'``.
-    TypeError
-        If ``spp`` or ``pct_list`` elements are the wrong type, or if depth
-        values are non-numeric.
+    :param spp: Species code or sequence of species codes defining stand composition.
+        When a sequence is provided, ``pct_list`` is required.
+    :param pct_list: Percentage of each species in ``spp``. Values must sum to
+        100 (+/-0.5). Required when ``spp`` contains multiple species.
+    :param return_type: ``'bulk_density'`` to return weighted duff and litter
+        bulk density in kg/m^3, or ``'biomass'`` to return biomass in kg/m^2.
+    :param duff_depth: Duff layer depth in cm (scalar or 1-D array). Required
+        for biomass when ``litter_depth`` is not provided.
+    :param litter_depth: Litter layer depth in cm (scalar or 1-D array).
+        Required for biomass when ``duff_depth`` is not provided.
+    :return: Either ``(duff_bulk_density, litter_bulk_density)`` in kg/m^3, or
+        duff/litter biomass in kg/m^2 as float, tuple, or ``np.ndarray``
+        depending on inputs.
+    :raises ValueError: If ``return_type`` is invalid, if mixed-species inputs
+        are malformed, or if biomass is requested without at least one depth.
+    :raises TypeError: If ``spp``, ``pct_list``, or depth inputs use invalid
+        types.
     """
     species_list, pct_values = _validate_species_mix(spp, pct_list)
     if return_type not in {'bulk_density', 'biomass'}:
@@ -278,35 +319,19 @@ def get_photoload_biomass(
     height: Optional[Union[float, np.ndarray]] = None,
 ) -> Union[float, np.ndarray]:
     """
-    Estimate Photoload biomass in kg/m².
+    Estimate Photoload biomass in kg/m^2.
 
-    Parameters
-    ----------
-    pl_code : str or np.ndarray
-        Photoload species code or 1-D array of species codes.
-        Supported codes: 'AMAL', 'BERE', 'MARE', 'SYAL', 'VAGL', 'VASC',
-        'ARLA', 'CARU', 'FESC', 'XETE'. Invalid codes produce a warning and
-        return 0.0 for the affected elements.
-    pct_cvr : float or np.ndarray
-        Percent cover (0-100). Scalar or 1-D array.
-    height : float or np.ndarray, optional
-        Canopy height in cm. Scalar or 1-D array. Pass ``None`` to use the
-        default height for all elements. Within an array, use ``np.nan`` to
-        use the species default height for individual elements.
-
-    Returns
-    -------
-    float
-        When all inputs are scalars.
-    np.ndarray
-        When any input is np.ndarray.
-
-    Raises
-    ------
-    ValueError
-        If array inputs have mismatched lengths or if an ndarray is not 1-D.
-    TypeError
-        If plain sequences (list, tuple) are passed instead of np.ndarray.
+    :param pl_code: Photoload species code or 1-D array of species codes.
+        Supported codes are ``AMAL``, ``BERE``, ``MARE``, ``SYAL``, ``VAGL``,
+        ``VASC``, ``ARLA``, ``CARU``, ``FESC``, and ``XETE``.
+    :param pct_cvr: Percent cover (0-100) as a scalar or 1-D array.
+    :param height: Canopy height in cm as a scalar or 1-D array. Use ``None``
+        for default heights, or ``np.nan`` within arrays to use per-species
+        defaults for specific elements.
+    :return: Biomass as a float when all inputs are scalars, otherwise a 1-D
+        ``np.ndarray``.
+    :raises ValueError: If ndarray inputs are not 1-D or vector lengths do not match.
+    :raises TypeError: If plain Python sequences are passed instead of ndarrays.
     """
     # Validate: reject plain sequences and 0-D arrays
     for _name, _val in [('pl_code', pl_code), ('pct_cvr', pct_cvr)] + (
@@ -391,41 +416,21 @@ def get_tree_biomass(
     height: Optional[Union[float, np.ndarray]] = None,
 ) -> Union[float, tuple[float, ...], np.ndarray, tuple[np.ndarray, ...]]:
     """
-    Return species-specific biomass values for tree components using Canadian National Biomass equations.
+    Return species-specific biomass for tree components using Canadian National Biomass equations.
 
-    Parameters
-    ----------
-    spp : str or np.ndarray
-        Species code or 1-D array of species codes.
-    decayclass : int or np.ndarray
-        Decay class integer or 1-D array of decay class integers.
+    :param spp: Species code or 1-D array of species codes.
+    :param decayclass: Decay class integer or 1-D array of decay class integers.
         Valid range is 1-9 for softwood species and 1-6 for hardwood species.
-    components : str or sequence of str
-        One or more of 'wood', 'bark', 'branches', 'foliage'.
-    dbh : float or np.ndarray
-        Diameter at breast height in cm. Scalar or 1-D array.
-    height : float or np.ndarray, optional
-        Tree height in m. Scalar or 1-D array. When omitted, the DBH-only
-        allometric equation is used for all trees in the call.
-
-    Returns
-    -------
-    float
-        When all inputs are scalars and a single component is requested.
-    tuple of float
-        When all inputs are scalars and multiple components are requested.
-    np.ndarray
-        When any input is np.ndarray and a single component is requested.
-    tuple of np.ndarray
-        When any input is np.ndarray and multiple components are requested.
-
-    Raises
-    ------
-    ValueError
-        If an unknown species code is given, if the decay class is out of range
-        for the species type, or if array inputs have mismatched lengths.
-    TypeError
-        If components is not a string or sequence of strings.
+    :param components: One or more of ``'wood'``, ``'bark'``, ``'branches'``,
+        ``'foliage'``.
+    :param dbh: Diameter at breast height in cm as a scalar or 1-D array.
+    :param height: Tree height in m as a scalar or 1-D array. If omitted,
+        DBH-only allometric equations are used.
+    :return: Component biomass values as float/tuple for scalar calls, or as
+        ``np.ndarray``/tuple of ``np.ndarray`` for vectorized calls.
+    :raises ValueError: If species or decay class values are invalid, if arrays
+        are not 1-D, or if vector lengths are inconsistent.
+    :raises TypeError: If ``components`` or vector input container types are invalid.
     """
     component_list = _normalize_components(components)
 

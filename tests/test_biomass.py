@@ -12,18 +12,23 @@ import biomass
 
 
 class GetTreeBiomassTests(unittest.TestCase):
+    """Behavioral tests for ``biomass.get_tree_biomass``."""
+
     def test_scalar_dbh_only_uses_dbh_coefficients(self):
+        """Use DBH-only coefficients when ``height`` is omitted."""
         result = biomass.get_tree_biomass('PY', 1, 'wood', 30.0)
         expected = 0.0564 * math.pow(30.0, 2.4465)
         self.assertAlmostEqual(result, expected, places=9)
 
     def test_scalar_input_returns_float(self):
+        """Return a float for scalar input and single component."""
         result = biomass.get_tree_biomass('PY', 1, 'wood', 30.0)
         self.assertIsInstance(result, float)
         expected = 0.0564 * math.pow(30.0, 2.4465)
         self.assertAlmostEqual(result, expected, places=9)
 
     def test_array_single_component_returns_ndarray(self):
+        """Return a 1-D ndarray for vectorized single-component input."""
         result = biomass.get_tree_biomass(
             np.array(['PY', 'FDI']),
             np.array([1, 1]),
@@ -34,6 +39,7 @@ class GetTreeBiomassTests(unittest.TestCase):
         self.assertEqual(result.shape, (2,))
 
     def test_array_values_match_scalar_calls(self):
+        """Match vectorized values to equivalent scalar calls."""
         result = biomass.get_tree_biomass(
             np.array(['PY', 'FDI']),
             np.array([1, 1]),
@@ -46,6 +52,7 @@ class GetTreeBiomassTests(unittest.TestCase):
         self.assertAlmostEqual(float(result[1]), expected_fdi, places=9)
 
     def test_array_multi_component_returns_tuple_of_ndarrays(self):
+        """Return tuple[ndarray, ...] for vectorized multi-component requests."""
         result = biomass.get_tree_biomass(
             np.array(['PY', 'FDI']),
             np.array([1, 1]),
@@ -58,6 +65,7 @@ class GetTreeBiomassTests(unittest.TestCase):
         self.assertIsInstance(result[1], np.ndarray)
 
     def test_mixed_scalar_array_input_returns_ndarray(self):
+        """Broadcast scalar metadata across vector DBH input."""
         result = biomass.get_tree_biomass(
             'PY',
             1,
@@ -68,6 +76,7 @@ class GetTreeBiomassTests(unittest.TestCase):
         self.assertEqual(result.shape, (2,))
 
     def test_array_with_height_uses_dbh_ht_coefficients(self):
+        """Use DBH-height coefficients when ``height`` is provided."""
         result = biomass.get_tree_biomass(
             np.array(['PY', 'PY']),
             np.array([1, 1]),
@@ -86,6 +95,7 @@ class GetTreeBiomassTests(unittest.TestCase):
         self.assertAlmostEqual(float(result[1]), expected, places=9)
 
     def test_array_mismatched_lengths_raises(self):
+        """Raise ``ValueError`` for mismatched vector input lengths."""
         with self.assertRaises(ValueError):
             biomass.get_tree_biomass(
                 np.array(['PY', 'FDI']),
@@ -95,6 +105,7 @@ class GetTreeBiomassTests(unittest.TestCase):
             )
 
     def test_array_no_height_uses_dbh_only_coefficients(self):
+        """Use DBH-only coefficients for vector calls without ``height``."""
         result = biomass.get_tree_biomass(
             np.array(['PY', 'PY']),
             np.array([1, 1]),
@@ -110,10 +121,12 @@ class GetTreeBiomassTests(unittest.TestCase):
         self.assertAlmostEqual(float(result[1]), expected_1, places=9)
 
     def test_hardwood_decay_class_out_of_range_raises(self):
+        """Reject decay classes outside hardwood valid range."""
         with self.assertRaises(ValueError):
             biomass.get_tree_biomass('MA', 7, 'wood', 30.0)
 
     def test_vectorized_tree_biomass_returns_tuple_of_ndarrays(self):
+        """Return expected vectorized outputs for mixed species/components."""
         result = biomass.get_tree_biomass(
             np.array(['PY', 'FDI']),
             np.array([1, 4]),
@@ -160,18 +173,23 @@ class GetTreeBiomassTests(unittest.TestCase):
 
 
 class GetPhotoloadBiomassTests(unittest.TestCase):
+    """Behavioral tests for ``biomass.get_photoload_biomass``."""
+
     def test_uses_default_height_when_missing(self):
+        """Use species default height for scalar calls when ``height`` is omitted."""
         result = biomass.get_photoload_biomass('AMAL', 50.0)
         expected = 0.0148 * math.exp(0.0454 * 50.0)
         self.assertAlmostEqual(result, expected, places=9)
 
     def test_scalar_input_returns_float(self):
+        """Return a float for scalar photoload input."""
         result = biomass.get_photoload_biomass('AMAL', 50.0)
         self.assertIsInstance(result, float)
         expected = 0.0148 * math.exp(0.0454 * 50.0)
         self.assertAlmostEqual(result, expected, places=9)
 
     def test_array_input_returns_ndarray(self):
+        """Return a 1-D ndarray for vectorized photoload input."""
         result = biomass.get_photoload_biomass(
             np.array(['AMAL', 'VAGL']),
             np.array([50.0, 10.0]),
@@ -183,6 +201,7 @@ class GetPhotoloadBiomassTests(unittest.TestCase):
         self.assertAlmostEqual(float(result[1]), 0.0052 * 10.0, places=9)
 
     def test_array_none_height_uses_all_defaults(self):
+        """Apply default heights when ``height`` is omitted for arrays."""
         result = biomass.get_photoload_biomass(
             np.array(['AMAL', 'AMAL']),
             np.array([50.0, 50.0]),
@@ -193,6 +212,7 @@ class GetPhotoloadBiomassTests(unittest.TestCase):
         self.assertAlmostEqual(float(result[1]), expected, places=9)
 
     def test_array_nan_height_uses_per_element_default(self):
+        """Apply per-element default height where array height values are ``nan``."""
         result = biomass.get_photoload_biomass(
             np.array(['AMAL', 'AMAL']),
             np.array([50.0, 50.0]),
@@ -206,6 +226,7 @@ class GetPhotoloadBiomassTests(unittest.TestCase):
         self.assertNotAlmostEqual(float(result[0]), float(result[1]), places=6)
 
     def test_invalid_code_in_array_warns_and_fills_zero(self):
+        """Warn and emit zero biomass for invalid codes in vectorized calls."""
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter('always')
             result = biomass.get_photoload_biomass(
@@ -218,6 +239,7 @@ class GetPhotoloadBiomassTests(unittest.TestCase):
         self.assertTrue(caught)
 
     def test_array_mismatched_lengths_raises(self):
+        """Raise ``ValueError`` for mismatched array lengths."""
         with self.assertRaises(ValueError):
             biomass.get_photoload_biomass(
                 np.array(['AMAL', 'VAGL']),
@@ -225,6 +247,7 @@ class GetPhotoloadBiomassTests(unittest.TestCase):
             )
 
     def test_invalid_photoload_species_warns_and_returns_zero(self):
+        """Warn and return zero biomass for invalid scalar photoload species."""
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter('always')
             result = biomass.get_photoload_biomass('NOPE', 20.0)
@@ -234,11 +257,15 @@ class GetPhotoloadBiomassTests(unittest.TestCase):
 
 
 class GetDuffLitterBiomassTests(unittest.TestCase):
+    """Behavioral tests for ``biomass.get_duff_litter_biomass``."""
+
     def test_bulk_density_for_single_species(self):
+        """Return expected bulk density tuple for single-species input."""
         result = biomass.get_duff_litter_biomass('PY', return_type='bulk_density')
         self.assertEqual(result, (137.5986003, 53.50166766))
 
     def test_weighted_bulk_density_for_species_mix(self):
+        """Return weighted bulk densities for mixed-species composition."""
         result = biomass.get_duff_litter_biomass(
             ['PY', 'FDI', 'PLI'],
             pct_list=[60.0, 30.0, 10.0],
@@ -250,6 +277,7 @@ class GetDuffLitterBiomassTests(unittest.TestCase):
         self.assertAlmostEqual(result[1], expected_litter, places=9)
 
     def test_biomass_accepts_array_depths(self):
+        """Support array depth inputs and return arrays for both layers."""
         result = biomass.get_duff_litter_biomass(
             'PY',
             return_type='biomass',
@@ -265,11 +293,13 @@ class GetDuffLitterBiomassTests(unittest.TestCase):
         self.assertAlmostEqual(float(result[1][1]), 53.50166766 * 0.007, places=9)
 
     def test_scalar_biomass_returns_float(self):
+        """Return float biomass for scalar depth input."""
         result = biomass.get_duff_litter_biomass('PY', return_type='biomass', duff_depth=3.4)
         self.assertIsInstance(result, float)
         self.assertAlmostEqual(result, 137.5986003 * 0.034, places=9)
 
     def test_array_both_depths_returns_tuple_of_ndarrays(self):
+        """Return tuple of arrays when both duff and litter depths are arrays."""
         result = biomass.get_duff_litter_biomass(
             'PY',
             return_type='biomass',
@@ -285,6 +315,7 @@ class GetDuffLitterBiomassTests(unittest.TestCase):
         self.assertAlmostEqual(float(result[1][1]), 53.50166766 * 0.010, places=9)
 
     def test_array_single_depth_returns_ndarray(self):
+        """Return a single array when only one depth vector is provided."""
         result = biomass.get_duff_litter_biomass(
             'PY',
             return_type='biomass',
@@ -295,6 +326,7 @@ class GetDuffLitterBiomassTests(unittest.TestCase):
         self.assertAlmostEqual(float(result[1]), 137.5986003 * 0.050, places=9)
 
     def test_scalar_both_depths_returns_tuple_of_floats(self):
+        """Return tuple of floats when both scalar depths are supplied."""
         result = biomass.get_duff_litter_biomass(
             'PY',
             return_type='biomass',
@@ -308,10 +340,12 @@ class GetDuffLitterBiomassTests(unittest.TestCase):
         self.assertAlmostEqual(result[1], 53.50166766 * 0.007, places=9)
 
     def test_requires_pct_list_for_species_mix(self):
+        """Require ``pct_list`` when multiple species are provided."""
         with self.assertRaises(ValueError):
             biomass.get_duff_litter_biomass(['PY', 'FDI'], return_type='bulk_density')
 
     def test_mismatched_depth_array_lengths_raises(self):
+        """Raise ``ValueError`` when depth vector lengths do not match."""
         with self.assertRaises(ValueError):
             biomass.get_duff_litter_biomass(
                 'PY',
@@ -321,6 +355,7 @@ class GetDuffLitterBiomassTests(unittest.TestCase):
             )
 
     def test_biomass_no_depth_raises(self):
+        """Raise ``ValueError`` when biomass is requested without depths."""
         with self.assertRaises(ValueError):
             biomass.get_duff_litter_biomass('PY', return_type='biomass')
 

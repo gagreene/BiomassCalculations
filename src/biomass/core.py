@@ -154,13 +154,6 @@ def _normalize_depth(depth: Optional[Union[int, float, np.ndarray]], name: str):
         if not np.issubdtype(depth.dtype, np.number):
             raise TypeError(f'"{name}" values must be numeric and expressed in cm')
         return depth / 100.0
-    if isinstance(depth, Sequence) and not isinstance(depth, (str, bytes, bytearray)):
-        normalized = []
-        for value in depth:
-            if not isinstance(value, Real):
-                raise TypeError(f'"{name}" values must be numeric and expressed in cm')
-            normalized.append(value / 100)
-        return normalized
     if not isinstance(depth, Real):
         raise TypeError(f'"{name}" must be numeric and expressed in cm')
     return depth / 100.0
@@ -261,6 +254,10 @@ def getDuffLitterBiomass(
 
     normalized_duff = _normalize_depth(duff_depth, 'duff_depth')
     normalized_litter = _normalize_depth(litter_depth, 'litter_depth')
+
+    if isinstance(normalized_duff, np.ndarray) and isinstance(normalized_litter, np.ndarray):
+        if normalized_duff.shape != normalized_litter.shape:
+            raise ValueError('"duff_depth" and "litter_depth" must have the same length')
 
     if normalized_duff is None and normalized_litter is None:
         raise ValueError('At least one of "duff_depth" or "litter_depth" must be provided for biomass')

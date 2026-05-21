@@ -275,6 +275,19 @@ class GetDuffLitterBiomassTests(unittest.TestCase):
         self.assertAlmostEqual(float(result[0]), 137.5986003 * 0.034, places=9)
         self.assertAlmostEqual(float(result[1]), 137.5986003 * 0.050, places=9)
 
+    def test_scalar_both_depths_returns_tuple_of_floats(self):
+        result = biomass.getDuffLitterBiomass(
+            'PY',
+            return_type='biomass',
+            duff_depth=3.4,
+            litter_depth=0.7,
+        )
+        self.assertIsInstance(result, tuple)
+        self.assertIsInstance(result[0], float)
+        self.assertIsInstance(result[1], float)
+        self.assertAlmostEqual(result[0], 137.5986003 * 0.034, places=9)
+        self.assertAlmostEqual(result[1], 53.50166766 * 0.007, places=9)
+
     def test_requires_pct_list_for_species_mix(self):
         with self.assertRaises(ValueError):
             biomass.getDuffLitterBiomass(['PY', 'FDI'], return_type='bulk_density')

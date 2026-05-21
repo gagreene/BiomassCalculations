@@ -230,21 +230,50 @@ class GetDuffLitterBiomassTests(unittest.TestCase):
         self.assertAlmostEqual(result[0], expected_duff, places=9)
         self.assertAlmostEqual(result[1], expected_litter, places=9)
 
-    def test_biomass_accepts_vector_depths(self):
+    def test_biomass_accepts_array_depths(self):
         result = biomass.getDuffLitterBiomass(
             'PY',
             return_type='biomass',
-            duff_depth=[3.4, 0.0],
-            litter_depth=[0.7, 1.4],
+            duff_depth=np.array([3.4, 0.0]),
+            litter_depth=np.array([1.4, 0.7]),
         )
-        expected = [
-            (137.5986003 * 0.034, 53.50166766 * 0.007),
-            (0.0, 53.50166766 * 0.014),
-        ]
-        self.assertEqual(len(result), 2)
-        for actual_row, expected_row in zip(result, expected):
-            self.assertAlmostEqual(actual_row[0], expected_row[0], places=9)
-            self.assertAlmostEqual(actual_row[1], expected_row[1], places=9)
+        self.assertIsInstance(result, tuple)
+        self.assertIsInstance(result[0], np.ndarray)
+        self.assertIsInstance(result[1], np.ndarray)
+        self.assertAlmostEqual(float(result[0][0]), 137.5986003 * 0.034, places=9)
+        self.assertAlmostEqual(float(result[1][0]), 53.50166766 * 0.014, places=9)
+        self.assertAlmostEqual(float(result[0][1]), 0.0, places=9)
+        self.assertAlmostEqual(float(result[1][1]), 53.50166766 * 0.007, places=9)
+
+    def test_scalar_biomass_returns_float(self):
+        result = biomass.getDuffLitterBiomass('PY', return_type='biomass', duff_depth=3.4)
+        self.assertIsInstance(result, float)
+        self.assertAlmostEqual(result, 137.5986003 * 0.034, places=9)
+
+    def test_array_both_depths_returns_tuple_of_ndarrays(self):
+        result = biomass.getDuffLitterBiomass(
+            'PY',
+            return_type='biomass',
+            duff_depth=np.array([3.4, 5.0]),
+            litter_depth=np.array([0.7, 1.0]),
+        )
+        self.assertIsInstance(result, tuple)
+        self.assertIsInstance(result[0], np.ndarray)
+        self.assertIsInstance(result[1], np.ndarray)
+        self.assertAlmostEqual(float(result[0][0]), 137.5986003 * 0.034, places=9)
+        self.assertAlmostEqual(float(result[1][0]), 53.50166766 * 0.007, places=9)
+        self.assertAlmostEqual(float(result[0][1]), 137.5986003 * 0.050, places=9)
+        self.assertAlmostEqual(float(result[1][1]), 53.50166766 * 0.010, places=9)
+
+    def test_array_single_depth_returns_ndarray(self):
+        result = biomass.getDuffLitterBiomass(
+            'PY',
+            return_type='biomass',
+            duff_depth=np.array([3.4, 5.0]),
+        )
+        self.assertIsInstance(result, np.ndarray)
+        self.assertAlmostEqual(float(result[0]), 137.5986003 * 0.034, places=9)
+        self.assertAlmostEqual(float(result[1]), 137.5986003 * 0.050, places=9)
 
     def test_requires_pct_list_for_species_mix(self):
         with self.assertRaises(ValueError):

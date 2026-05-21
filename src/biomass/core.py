@@ -46,10 +46,6 @@ PHOTOLOAD_DEFAULT_HEIGHTS = {
 }
 
 
-def _as_scalar_or_vector(results: list, is_vectorized: bool):
-    return results if is_vectorized else results[0]
-
-
 def _any_array(*args) -> bool:
     """Return True if any argument is a np.ndarray."""
     return any(isinstance(a, np.ndarray) for a in args)
@@ -58,23 +54,6 @@ def _any_array(*args) -> bool:
 def _to_1d_array(value) -> np.ndarray:
     """Coerce a scalar or array to a 1-D ndarray."""
     return np.atleast_1d(np.asarray(value))
-
-
-def _broadcast_arguments(**kwargs):
-    lengths = {len(value) for value in kwargs.values() if _is_sequence(value)}
-    if not lengths:
-        return False, {name: [value] for name, value in kwargs.items()}
-    if len(lengths) != 1:
-        raise ValueError('Vector inputs must all be the same length')
-
-    vector_length = lengths.pop()
-    broadcast = {}
-    for name, value in kwargs.items():
-        if _is_sequence(value):
-            broadcast[name] = list(value)
-        else:
-            broadcast[name] = [value] * vector_length
-    return True, broadcast
 
 
 def _calculate_photoload_biomass(pl_code: str, pct_cvr, height):
@@ -130,14 +109,6 @@ def _get_species_row(species: str) -> dict[str, Union[str, float]]:
         raise ValueError(f'Unknown species code: "{species}"') from exc
 
 
-def _is_finite_number(value: object) -> bool:
-    return isinstance(value, Real) and math.isfinite(value)
-
-
-def _is_sequence(value: object) -> bool:
-    return isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray))
-
-
 def _load_biomass_data(path: Path) -> dict[str, dict[str, Union[str, float]]]:
     with path.open(newline='', encoding='utf-8-sig') as handle:
         reader = csv.DictReader(handle)
@@ -165,7 +136,7 @@ def _load_biomass_data(path: Path) -> dict[str, dict[str, Union[str, float]]]:
 def _normalize_components(components: Union[str, Sequence[str]]) -> list[str]:
     if isinstance(components, str):
         component_list = [components]
-    elif _is_sequence(components):
+    elif isinstance(components, Sequence) and not isinstance(components, (str, bytes, bytearray)):
         component_list = list(components)
     else:
         raise TypeError('"components" must be a string or a sequence of strings')
@@ -183,7 +154,7 @@ def _normalize_depth(depth: Optional[Union[int, float, np.ndarray]], name: str):
         if not np.issubdtype(depth.dtype, np.number):
             raise TypeError(f'"{name}" values must be numeric and expressed in cm')
         return depth / 100.0
-    if _is_sequence(depth):
+    if isinstance(depth, Sequence) and not isinstance(depth, (str, bytes, bytearray)):
         normalized = []
         for value in depth:
             if not isinstance(value, Real):
@@ -201,13 +172,13 @@ def _validate_species_mix(
 ) -> tuple[list[str], Optional[list[float]]]:
     if isinstance(spp, str):
         return [spp], None
-    if not _is_sequence(spp):
+    if not (isinstance(spp, Sequence) and not isinstance(spp, (str, bytes, bytearray))):
         raise TypeError('"spp" must be a string or a sequence of species codes')
     if not all(isinstance(species, str) for species in spp):
         raise TypeError('Each species code in "spp" must be a string')
     if pct_list is None:
         raise ValueError('"pct_list" is required when "spp" contains multiple species')
-    if not _is_sequence(pct_list):
+    if not (isinstance(pct_list, Sequence) and not isinstance(pct_list, (str, bytes, bytearray))):
         raise TypeError('"pct_list" must be a sequence of numeric percentages')
     if len(spp) != len(pct_list):
         raise ValueError('"spp" and "pct_list" must be the same length')
@@ -226,14 +197,57 @@ def getDuffLitterBiomass(
     spp: Union[str, Sequence[str]],
     pct_list: Optional[Sequence[float]] = None,
     return_type: str = 'bulk_density',
-    duff_depth: Optional[Union[int, float, Sequence[Union[int, float]]]] = None,
-    litter_depth: Optional[Union[int, float, Sequence[Union[int, float]]]] = None,
-) -> Union[float, tuple[float, float], list[float], list[tuple[float, float]]]:
+    duff_depth: Optional[Union[int, float, np.ndarray]] = None,
+    litter_depth: Optional[Union[int, float, np.ndarray]] = None,
+) -> Union[float, tuple[float, float], np.ndarray, tuple[np.ndarray, np.ndarray]]:
     """
     Return duff/litter bulk density values or calculate duff/litter biomass.
 
-    Species mixes are provided through ``spp`` + ``pct_list``. ``duff_depth`` and ``litter_depth`` may be
-    scalars or same-length vectors expressed in cm.
+    Parameters
+    ----------
+    spp : str or sequence of str
+        Species code or sequence of species codes defining the stand composition.
+        When a sequence is given, ``pct_list`` is required.
+    pct_list : sequence of float, optional
+        Percentage of each species in ``spp``. Values must sum to 100 (±0.5).
+        Required when ``spp`` contains more than one species.
+    return_type : {'bulk_density', 'biomass'}
+        'bulk_density' returns the weighted duff and litter bulk density values
+        in kg/m³. 'biomass' multiplies bulk density by the supplied depths to
+        return biomass in kg/m².
+    duff_depth : int, float, or np.ndarray, optional
+        Duff layer depth in cm. Scalar or 1-D array. Required when
+        ``return_type='biomass'`` and ``litter_depth`` is not given.
+    litter_depth : int, float, or np.ndarray, optional
+        Litter layer depth in cm. Scalar or 1-D array. Required when
+        ``return_type='biomass'`` and ``duff_depth`` is not given.
+
+    Returns
+    -------
+    tuple of float
+        ``(duff_bulk_density, litter_bulk_density)`` in kg/m³ when
+        ``return_type='bulk_density'``.
+    float
+        Biomass in kg/m² when scalar depth inputs and only one depth is given.
+    tuple of float
+        ``(duff_biomass, litter_biomass)`` in kg/m² when scalar depth inputs
+        and both depths are given.
+    np.ndarray
+        Biomass array in kg/m² when any depth input is np.ndarray and only
+        one depth is given.
+    tuple of np.ndarray
+        ``(duff_biomass, litter_biomass)`` arrays in kg/m² when any depth input
+        is np.ndarray and both depths are given.
+
+    Raises
+    ------
+    ValueError
+        If ``return_type`` is invalid, if ``pct_list`` is missing for a
+        multi-species ``spp``, if ``pct_list`` does not sum to 100, or if no
+        depth is provided when ``return_type='biomass'``.
+    TypeError
+        If ``spp`` or ``pct_list`` elements are the wrong type, or if depth
+        values are non-numeric.
     """
     species_list, pct_values = _validate_species_mix(spp, pct_list)
     if return_type not in {'bulk_density', 'biomass'}:
@@ -243,22 +257,26 @@ def getDuffLitterBiomass(
     if return_type == 'bulk_density':
         return duff_bd, litter_bd
 
+    return_array = _any_array(duff_depth, litter_depth)
+
     normalized_duff = _normalize_depth(duff_depth, 'duff_depth')
     normalized_litter = _normalize_depth(litter_depth, 'litter_depth')
+
     if normalized_duff is None and normalized_litter is None:
         raise ValueError('At least one of "duff_depth" or "litter_depth" must be provided for biomass')
 
-    is_vectorized, args = _broadcast_arguments(duff_depth=normalized_duff, litter_depth=normalized_litter)
-    results = []
-    for duff_value, litter_value in zip(args['duff_depth'], args['litter_depth']):
-        if duff_value is not None and litter_value is not None:
-            results.append((duff_bd * duff_value, litter_bd * litter_value))
-        elif duff_value is not None:
-            results.append(duff_bd * duff_value)
-        else:
-            results.append(litter_bd * litter_value)
-
-    return _as_scalar_or_vector(results, is_vectorized)
+    if normalized_duff is not None and normalized_litter is not None:
+        duff_biomass = np.asarray(duff_bd * normalized_duff)
+        litter_biomass = np.asarray(litter_bd * normalized_litter)
+        if return_array:
+            return np.atleast_1d(duff_biomass), np.atleast_1d(litter_biomass)
+        return float(duff_biomass), float(litter_biomass)
+    elif normalized_duff is not None:
+        result = np.asarray(duff_bd * normalized_duff)
+        return np.atleast_1d(result) if return_array else float(result)
+    else:
+        result = np.asarray(litter_bd * normalized_litter)
+        return np.atleast_1d(result) if return_array else float(result)
 
 
 def getPhotoloadBiomass(

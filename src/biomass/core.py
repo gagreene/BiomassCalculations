@@ -93,15 +93,6 @@ def _get_bulk_density(spp: list[str], pct_list: Optional[list[float]]) -> tuple[
     return duff_bd, litter_bd
 
 
-def _get_decay_vector(species: str, decayclass: int) -> tuple[float, ...]:
-    decay_lookup = SOFTWOOD_DECAY if species in SOFTWOOD_SPECIES else HARDWOOD_DECAY
-    try:
-        return decay_lookup[decayclass]
-    except KeyError as exc:
-        tree_type = 'softwood' if species in SOFTWOOD_SPECIES else 'hardwood'
-        raise ValueError(f'Invalid decay class "{decayclass}" for {tree_type} species "{species}"') from exc
-
-
 def _get_species_row(species: str) -> dict[str, Union[str, float]]:
     try:
         return BIOMASS_DATA[species]
@@ -263,11 +254,16 @@ def getDuffLitterBiomass(
         raise ValueError('At least one of "duff_depth" or "litter_depth" must be provided for biomass')
 
     if normalized_duff is not None and normalized_litter is not None:
-        duff_biomass = np.asarray(duff_bd * normalized_duff)
-        litter_biomass = np.asarray(litter_bd * normalized_litter)
+        duff_arr = np.atleast_1d(np.asarray(duff_bd * normalized_duff, dtype=float))
+        litter_arr = np.atleast_1d(np.asarray(litter_bd * normalized_litter, dtype=float))
         if return_array:
-            return np.atleast_1d(duff_biomass), np.atleast_1d(litter_biomass)
-        return float(duff_biomass), float(litter_biomass)
+            n = max(duff_arr.shape[0], litter_arr.shape[0])
+            if duff_arr.shape[0] == 1 and n > 1:
+                duff_arr = np.repeat(duff_arr, n)
+            if litter_arr.shape[0] == 1 and n > 1:
+                litter_arr = np.repeat(litter_arr, n)
+            return duff_arr, litter_arr
+        return float(duff_arr[0]), float(litter_arr[0])
     elif normalized_duff is not None:
         result = np.asarray(duff_bd * normalized_duff)
         return np.atleast_1d(result) if return_array else float(result)

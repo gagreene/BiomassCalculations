@@ -104,7 +104,7 @@ Notable helper roles:
 - `_normalize_components`, `_normalize_depth`, `_validate_species_mix`
   - Input validation and normalization helpers
 
-- `_get_species_row`, `_get_decay_vector`, `_get_bulk_density`
+- `_get_species_row`, `_get_bulk_density`
   - Lookup and derived-value helpers
 
 - `_calculate_photoload_biomass`
@@ -218,7 +218,7 @@ That is an intentional behavioral distinction in the current code.
 ### Hardwood decay class range is smaller than softwood
 
 `SOFTWOOD_DECAY` defines classes 1–9. `HARDWOOD_DECAY` defines classes 1–6 only.
-Passing `decayclass=7`, `8`, or `9` for a hardwood species raises `ValueError` via `_get_decay_vector`.
+Passing `decayclass=7`, `8`, or `9` for a hardwood species raises `ValueError` via the inline decay-class validation in `getTreeBiomass`.
 
 ### `pct_list` sum is checked with a tolerance
 
@@ -242,7 +242,7 @@ two-element tuple. The return shape therefore depends on which depth arguments a
 
 In `getTreeBiomass`, `components` is normalized once and applied to all tree records in the batch.
 You cannot specify different components for different trees in a single vectorized call.
-`components` is not passed through `_broadcast_arguments`.
+`components` applies uniformly to every tree in the batch and is not broadcast per element.
 
 ### Module-level constants are formally part of the public API
 

@@ -94,6 +94,25 @@ class GetTreeBiomassTests(unittest.TestCase):
                 np.array([30.0, 40.0]),
             )
 
+    def test_array_no_height_uses_dbh_only_coefficients(self):
+        result = biomass.getTreeBiomass(
+            np.array(['PY', 'PY']),
+            np.array([1, 1]),
+            'wood',
+            np.array([30.0, 40.0]),
+        )
+        py = biomass.BIOMASS_DATA['PY']
+        decay_factor = biomass.SOFTWOOD_DECAY[1][biomass.TREE_COMPONENT_INDEX['wood']]
+        expected_0 = decay_factor * py['BIOMASS_DBH_Bwood1'] * math.pow(30.0, py['BIOMASS_DBH_Bwood2'])
+        expected_1 = decay_factor * py['BIOMASS_DBH_Bwood1'] * math.pow(40.0, py['BIOMASS_DBH_Bwood2'])
+        self.assertIsInstance(result, np.ndarray)
+        self.assertAlmostEqual(float(result[0]), expected_0, places=9)
+        self.assertAlmostEqual(float(result[1]), expected_1, places=9)
+
+    def test_hardwood_decay_class_out_of_range_raises(self):
+        with self.assertRaises(ValueError):
+            biomass.getTreeBiomass('MA', 7, 'wood', 30.0)
+
     def test_vectorized_tree_biomass_returns_tuple_of_ndarrays(self):
         result = biomass.getTreeBiomass(
             np.array(['PY', 'FDI']),
@@ -291,6 +310,19 @@ class GetDuffLitterBiomassTests(unittest.TestCase):
     def test_requires_pct_list_for_species_mix(self):
         with self.assertRaises(ValueError):
             biomass.getDuffLitterBiomass(['PY', 'FDI'], return_type='bulk_density')
+
+    def test_mismatched_depth_array_lengths_raises(self):
+        with self.assertRaises(ValueError):
+            biomass.getDuffLitterBiomass(
+                'PY',
+                return_type='biomass',
+                duff_depth=np.array([3.4, 5.0]),
+                litter_depth=np.array([0.7]),
+            )
+
+    def test_biomass_no_depth_raises(self):
+        with self.assertRaises(ValueError):
+            biomass.getDuffLitterBiomass('PY', return_type='biomass')
 
 
 if __name__ == '__main__':
